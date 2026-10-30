@@ -1,0 +1,6 @@
+{
+  "name": "GlidePad",
+  "description": "Turn your Android device into a PC touchpad and keyboard with customizable gestures and low-latency Bluetooth connectivity.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
