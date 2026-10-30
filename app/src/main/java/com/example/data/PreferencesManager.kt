@@ -94,6 +94,22 @@ class PreferencesManager(context: Context) {
         _settings.value = newSettings
     }
 
+    fun getSavedPcIp(): String {
+        return prefs.getString(KEY_PC_IP, "192.168.1.100") ?: "192.168.1.100"
+    }
+
+    fun setSavedPcIp(ip: String) {
+        prefs.edit().putString(KEY_PC_IP, ip).apply()
+    }
+
+    fun getSavedConnectionMode(): String {
+        return prefs.getString(KEY_CONNECTION_MODE, "BLUETOOTH_HID") ?: "BLUETOOTH_HID"
+    }
+
+    fun setSavedConnectionMode(mode: String) {
+        prefs.edit().putString(KEY_CONNECTION_MODE, mode).apply()
+    }
+
     fun resetToDefaults() {
         val default = TouchpadSettings()
         updateSettings(default)
@@ -112,5 +128,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_HAPTIC_LEVEL = "key_haptic_level"
         private const val KEY_SHOW_BUTTONS = "key_show_buttons"
         private const val KEY_SHOW_SCROLL_STRIP = "key_show_scroll_strip"
+        private const val KEY_PC_IP = "key_pc_ip_address"
+        private const val KEY_CONNECTION_MODE = "key_last_conn_mode"
     }
 }

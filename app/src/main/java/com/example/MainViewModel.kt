@@ -48,7 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val preferencesManager = PreferencesManager(application)
     val hapticHelper = HapticFeedbackHelper(application)
     val bluetoothManager = BluetoothHidManager(application)
-    val networkManager = NetworkStreamManager()
+    val networkManager = NetworkStreamManager(application)
 
     val settings: StateFlow<TouchpadSettings> = preferencesManager.settings
     val stats: StateFlow<DiagnosticStats> = bluetoothManager.stats
@@ -101,11 +101,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        networkManager.pcIpAddress = preferencesManager.getSavedPcIp()
+        val savedModeStr = preferencesManager.getSavedConnectionMode()
+        try {
+            val savedMode = ConnectionMode.valueOf(savedModeStr)
+            if (savedMode == ConnectionMode.LOCAL_WIFI) {
+                bluetoothManager.setWifiMode(networkManager.pcIpAddress)
+            }
+        } catch (e: Exception) {
+            // Keep default
+        }
+
         viewModelScope.launch {
             settings.collect { newSettings ->
                 touchpadEngine.updateSettings(newSettings)
             }
         }
+
+        viewModelScope.launch {
+            networkManager.logCallback.collect { log ->
+                if (log != null) {
+                    bluetoothManager.addLog(log)
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            networkManager.testState.collect { state ->
+                when (state) {
+                    is com.example.service.WifiConnectionTestState.Success -> {
+                        preferencesManager.setSavedPcIp(state.ip)
+                        preferencesManager.setSavedConnectionMode(ConnectionMode.LOCAL_WIFI.name)
+                        bluetoothManager.setWifiMode(state.ip)
+                    }
+                    else -> {}
+                }
+            }
+        }
+
         bluetoothManager.initialize()
     }
 
@@ -114,12 +147,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sendMouse(buttons: Byte, dx: Int, dy: Int, wheel: Int) {
-        // Send via Bluetooth HID
-        bluetoothManager.sendMouseReport(buttons, dx, dy, wheel)
-
-        // Send via Wi-Fi network companion if active
-        if (stats.value.connectionMode == ConnectionMode.LOCAL_WIFI) {
-            networkManager.sendMousePacket(dx, dy, buttons, wheel)
+        when (stats.value.connectionMode) {
+            ConnectionMode.BLUETOOTH_HID -> {
+                bluetoothManager.sendMouseReport(buttons, dx, dy, wheel)
+            }
+            ConnectionMode.LOCAL_WIFI -> {
+                networkManager.sendMousePacket(dx, dy, buttons, wheel)
+                bluetoothManager.recordPacketSent("WIFI MOUSE (btn=$buttons, dx=$dx, dy=$dy, whl=$wheel)")
+            }
+            ConnectionMode.SIMULATION -> {
+                bluetoothManager.recordPacketSent("SIM MOUSE (btn=$buttons, dx=$dx, dy=$dy)")
+            }
         }
 
         // Update virtual PC screen simulation
@@ -356,10 +394,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun switchConnectionMode(mode: ConnectionMode, param: String = "") {
         hapticHelper.click(settings.value.hapticLevel)
+        preferencesManager.setSavedConnectionMode(mode.name)
         when (mode) {
             ConnectionMode.BLUETOOTH_HID -> bluetoothManager.setBluetoothMode()
             ConnectionMode.LOCAL_WIFI -> {
-                if (param.isNotBlank()) networkManager.pcIpAddress = param
+                if (param.isNotBlank()) {
+                    networkManager.pcIpAddress = param
+                    preferencesManager.setSavedPcIp(param)
+                }
                 bluetoothManager.setWifiMode(networkManager.pcIpAddress)
             }
             ConnectionMode.SIMULATION -> bluetoothManager.setSimulationMode()
