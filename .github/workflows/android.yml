@@ -53,12 +53,38 @@ jobs:
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Setup release keystore
+        run: |
+          if [ ! -f my-upload-key.jks ]; then
+            if [ -n "$KEYSTORE_BASE64" ]; then
+              echo "$KEYSTORE_BASE64" | base64 -d > my-upload-key.jks
+            else
+              echo "Generating release keystore for CI..."
+              keytool -genkey -v -keystore my-upload-key.jks -storepass "${STORE_PASSWORD:-android}" -alias "${KEY_ALIAS:-upload}" -keypass "${KEY_PASSWORD:-android}" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=GlidePad Release,O=GlidePad,C=US"
+            fi
+          fi
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'android' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'android' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+          KEYSTORE_PATH: my-upload-key.jks
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: glidepad-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
