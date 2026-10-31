@@ -183,12 +183,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             networkManager.testState.collect { state ->
                 when (state) {
                     is com.example.service.WifiConnectionTestState.Success -> {
-                        preferencesManager.setSavedPcIp(state.ip)
-                        preferencesManager.setSavedConnectionMode(ConnectionMode.LOCAL_WIFI.name)
-                        bluetoothManager.setWifiMode(state.ip)
-                        networkManager.startHeartbeat()
+                        if (state.ip.isNotBlank()) {
+                            networkManager.pcIpAddress = state.ip
+                            preferencesManager.setSavedPcIp(state.ip)
+                            preferencesManager.setSavedConnectionMode(ConnectionMode.LOCAL_WIFI.name)
+                            bluetoothManager.setWifiMode(state.ip, state.serverName)
+                            networkManager.startHeartbeat()
+                        }
                     }
                     else -> {}
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            networkManager.targetPcIp.collect { newIp ->
+                if (newIp.isNotBlank() && stats.value.connectionMode == ConnectionMode.LOCAL_WIFI) {
+                    preferencesManager.setSavedPcIp(newIp)
+                    bluetoothManager.updateWifiOnline(networkManager.isPcOnline.value, newIp)
                 }
             }
         }

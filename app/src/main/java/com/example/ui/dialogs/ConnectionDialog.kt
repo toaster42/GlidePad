@@ -47,6 +47,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -97,11 +98,32 @@ fun ConnectionDialog(
         )
     }
 
-    var pcIpInput by remember { mutableStateOf(viewModel.networkManager.pcIpAddress) }
+    val currentNetworkPcIp by viewModel.networkManager.targetPcIp.collectAsState()
+    var pcIpInput by remember(currentNetworkPcIp) { mutableStateOf(currentNetworkPcIp) }
     var showBenchmarkDialog by remember { mutableStateOf(false) }
     val testState by viewModel.networkManager.testState.collectAsState()
     val pairedDevices = remember { viewModel.bluetoothManager.getBondedDevices() }
     val phoneIp = remember { viewModel.networkManager.getDeviceLocalIp() }
+
+    // Automatically update the manual IP text field and connection status when auto-detection or ping test succeeds
+    LaunchedEffect(testState) {
+        val currState = testState
+        if (currState is WifiConnectionTestState.Success) {
+            val detectedIp = currState.ip
+            if (detectedIp.isNotBlank()) {
+                pcIpInput = detectedIp
+                viewModel.networkManager.pcIpAddress = detectedIp
+                viewModel.preferencesManager.setSavedPcIp(detectedIp)
+                viewModel.bluetoothManager.setWifiMode(detectedIp, currState.serverName)
+            }
+        }
+    }
+
+    LaunchedEffect(currentNetworkPcIp) {
+        if (currentNetworkPcIp.isNotBlank() && pcIpInput != currentNetworkPcIp) {
+            pcIpInput = currentNetworkPcIp
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,

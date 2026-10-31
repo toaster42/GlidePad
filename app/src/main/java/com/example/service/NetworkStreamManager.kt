@@ -30,7 +30,12 @@ class NetworkStreamManager(private val context: Context) {
     private val tag = "NetworkStreamManager"
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    var pcIpAddress: String = "192.168.1.100"
+    val targetPcIp = MutableStateFlow("192.168.1.100")
+    var pcIpAddress: String
+        get() = targetPcIp.value
+        set(value) {
+            targetPcIp.value = value
+        }
     var pcPort: Int = 8089
 
     private var sendSocket: DatagramSocket? = null
@@ -131,6 +136,7 @@ class NetworkStreamManager(private val context: Context) {
                     lastPongReceivedTime = now
                     isPcOnline.value = true
                     liveLatencyMs.value = rtt
+                    pcIpAddress = senderIp
 
                     val server = json.optString("name", "GlidePad PC")
                     _testState.value = WifiConnectionTestState.Success(
@@ -177,6 +183,7 @@ class NetworkStreamManager(private val context: Context) {
         lastPongReceivedTime = now
         isPcOnline.value = true
         liveLatencyMs.value = latencyMs
+        pcIpAddress = senderIp
         _testState.value = WifiConnectionTestState.Success(
             latencyMs = latencyMs,
             serverName = serverName,

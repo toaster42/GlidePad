@@ -292,11 +292,16 @@ class BluetoothHidManager(private val context: Context) {
         addLog("Activated Interactive Virtual Desktop Mode")
     }
 
-    fun setWifiMode(pcIp: String) {
+    fun setWifiMode(pcIp: String, serverName: String = "") {
+        val label = if (serverName.isNotBlank() && serverName != "GlidePad PC") {
+            "$serverName ($pcIp)"
+        } else {
+            "PC at $pcIp"
+        }
         _stats.value = _stats.value.copy(
             connectionMode = ConnectionMode.LOCAL_WIFI,
             connectionStatus = ConnectionStatus.CONNECTED,
-            connectedDeviceName = "PC at $pcIp"
+            connectedDeviceName = label
         )
         addLog("Connected to PC Receiver via Wi-Fi: $pcIp:8089")
     }
