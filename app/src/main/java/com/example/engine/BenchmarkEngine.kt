@@ -33,9 +33,12 @@ data class BenchmarkReport(
     val minLatencyMs: Long,
     val avgLatencyMs: Double,
     val medianLatencyMs: Long,
+    val p90LatencyMs: Long = 0L,
     val p95LatencyMs: Long,
+    val p99LatencyMs: Long = 0L,
     val maxLatencyMs: Long,
     val jitterMs: Double,
+    val jitterStdDevMs: Double = 0.0,
     val streamPacketsSent: Int,
     val streamPacketsAcked: Int,
     val streamMeasuredHz: Double,
@@ -118,7 +121,7 @@ class BenchmarkEngine(
                         if (latencies.size > 1) {
                             val interval = rtt
                             val diff = abs(interval - previousInterval)
-                            calculatedJitter += (diff - calculatedJitter) / 16.0
+                            calculatedJitter = updateRfc3550Jitter(calculatedJitter, diff.toDouble())
                             previousInterval = interval
                         } else {
                             previousInterval = rtt
@@ -209,6 +212,7 @@ class BenchmarkEngine(
                 }
 
                 // -------------------------------------------------------------
+                // -------------------------------------------------------------
                 // Stage 3: Statistical Synthesis & Grading
                 // -------------------------------------------------------------
                 val sorted = latencies.sorted()
@@ -216,8 +220,11 @@ class BenchmarkEngine(
                 val minLat = sorted.first()
                 val maxLat = sorted.last()
                 val avgLat = sorted.average()
-                val medianLat = sorted[n / 2]
-                val p95Lat = sorted[(n * 0.95).toInt().coerceAtMost(n - 1)]
+                val medianLat = calculatePercentile(sorted, 0.50)
+                val p90Lat = calculatePercentile(sorted, 0.90)
+                val p95Lat = calculatePercentile(sorted, 0.95)
+                val p99Lat = calculatePercentile(sorted, 0.99)
+                val stdDev = calculateStdDev(sorted, avgLat)
 
                 val pingLossPct = ((config.pingCount - n).toFloat() / config.pingCount) * 100f
 
@@ -232,9 +239,12 @@ class BenchmarkEngine(
                     minLatencyMs = minLat,
                     avgLatencyMs = avgLat,
                     medianLatencyMs = medianLat,
+                    p90LatencyMs = p90Lat,
                     p95LatencyMs = p95Lat,
+                    p99LatencyMs = p99Lat,
                     maxLatencyMs = maxLat,
                     jitterMs = calculatedJitter,
+                    jitterStdDevMs = stdDev,
                     streamPacketsSent = streamPacketsToSend,
                     streamPacketsAcked = serverAckedPackets,
                     streamMeasuredHz = measuredHz,
@@ -253,6 +263,32 @@ class BenchmarkEngine(
     }
 
     companion object {
+        /**
+         * RFC 3550 jitter calculation: J(i) = J(i-1) + (|D(i-1, i)| - J(i-1)) / 16
+         */
+        fun updateRfc3550Jitter(currentJitter: Double, diff: Double): Double {
+            return currentJitter + (abs(diff) - currentJitter) / 16.0
+        }
+
+        /**
+         * Calculates percentile from sorted values using clamped indexing.
+         */
+        fun calculatePercentile(sortedValues: List<Long>, percentile: Double): Long {
+            if (sortedValues.isEmpty()) return 0L
+            val clampedP = percentile.coerceIn(0.0, 1.0)
+            val index = kotlin.math.round((sortedValues.size - 1) * clampedP).toInt().coerceIn(0, sortedValues.size - 1)
+            return sortedValues[index]
+        }
+
+        /**
+         * Calculates sample standard deviation of latency values.
+         */
+        fun calculateStdDev(values: List<Long>, mean: Double): Double {
+            if (values.size <= 1) return 0.0
+            val sumSquaredDiffs = values.sumOf { (it - mean) * (it - mean) }
+            return kotlin.math.sqrt(sumSquaredDiffs / (values.size - 1))
+        }
+
         fun evaluatePerformance(
             avgLat: Double,
             p95Lat: Long,

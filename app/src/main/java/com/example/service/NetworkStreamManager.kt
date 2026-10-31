@@ -47,6 +47,17 @@ class NetworkStreamManager(private val context: Context) {
     private val _logCallback = MutableStateFlow<String?>(null)
     val logCallback: StateFlow<String?> = _logCallback.asStateFlow()
 
+    var socketTimeoutMs: Int = 3000
+    var offlineTimeoutThresholdMs: Long = 6000L
+    var heartbeatIntervalMs: Long = 3000L
+    var maxRetryAttempts: Int = 3
+    var retryBackoffMs: Long = 50L
+
+    val malformedPacketsCount = MutableStateFlow(0)
+    val networkErrorCount = MutableStateFlow(0)
+    val packetsSentCount = MutableStateFlow(0L)
+    val packetsReceivedCount = MutableStateFlow(0L)
+
     private var pingStartTime: Long = 0
     private var lastPongReceivedTime: Long = 0
 
@@ -55,7 +66,7 @@ class NetworkStreamManager(private val context: Context) {
     }
 
     @Synchronized
-    private fun initSockets() {
+    fun initSockets() {
         try {
             if (sendSocket == null || sendSocket?.isClosed == true) {
                 sendSocket = DatagramSocket().apply {
@@ -64,6 +75,7 @@ class NetworkStreamManager(private val context: Context) {
             }
             startReceiver()
         } catch (e: Exception) {
+            networkErrorCount.value++
             Log.e(tag, "Failed to initialize UDP socket", e)
         }
     }
@@ -74,7 +86,7 @@ class NetworkStreamManager(private val context: Context) {
             try {
                 if (receiveSocket == null || receiveSocket?.isClosed == true) {
                     receiveSocket = DatagramSocket().apply {
-                        soTimeout = 3000
+                        soTimeout = socketTimeoutMs
                     }
                 }
                 val buffer = ByteArray(2048)
@@ -86,21 +98,32 @@ class NetworkStreamManager(private val context: Context) {
                         val text = String(packet.data, 0, packet.length)
                         handleIncomingPacket(text, packet.address.hostAddress ?: "")
                     } catch (e: SocketTimeoutException) {
-                        // Keep receiver alive
+                        // Keep receiver alive - timeout is expected when idle
                     } catch (e: Exception) {
+                        networkErrorCount.value++
                         if (!isActive) break
                         delay(500)
                     }
                 }
             } catch (e: Exception) {
+                networkErrorCount.value++
                 Log.e(tag, "Receiver exception", e)
             }
         }
     }
 
-    private fun handleIncomingPacket(rawJson: String, senderIp: String) {
-        try {
+    fun handleIncomingPacket(rawJson: String, senderIp: String) {
+        processIncomingPacket(rawJson, senderIp)
+    }
+
+    /**
+     * Processes an incoming raw JSON packet safely.
+     * Returns true if packet was parsed and recognized; false if malformed or unrecognized.
+     */
+    fun processIncomingPacket(rawJson: String, senderIp: String): Boolean {
+        return try {
             val json = JSONObject(rawJson)
+            packetsReceivedCount.value++
             when (json.optString("type")) {
                 "pong" -> {
                     val now = System.currentTimeMillis()
@@ -116,6 +139,7 @@ class NetworkStreamManager(private val context: Context) {
                         ip = senderIp
                     )
                     _logCallback.value = "[WIFI PONG] $server ($senderIp) • ${rtt}ms"
+                    true
                 }
                 "announce" -> {
                     val server = json.optString("name", "GlidePad PC")
@@ -128,11 +152,40 @@ class NetworkStreamManager(private val context: Context) {
                         ip = senderIp
                     )
                     _logCallback.value = "[WIFI DISCOVERY] Discovered PC: $server at $senderIp"
+                    true
                 }
+                else -> false
             }
         } catch (e: Exception) {
-            Log.w(tag, "Failed to parse incoming packet: $rawJson")
+            malformedPacketsCount.value++
+            Log.w(tag, "Failed to parse incoming packet: $rawJson", e)
+            false
         }
+    }
+
+    fun checkHeartbeatTimeout(currentTime: Long = System.currentTimeMillis()) {
+        if (lastPongReceivedTime > 0 && (currentTime - lastPongReceivedTime) > offlineTimeoutThresholdMs) {
+            if (isPcOnline.value) {
+                isPcOnline.value = false
+                _logCallback.value = "[WIFI OFFLINE] Heartbeat timed out (> ${offlineTimeoutThresholdMs}ms)"
+            }
+        }
+    }
+
+    fun simulatePongReceived(senderIp: String = pcIpAddress, latencyMs: Long = 4L, serverName: String = "Test PC") {
+        val now = System.currentTimeMillis()
+        lastPongReceivedTime = now
+        isPcOnline.value = true
+        liveLatencyMs.value = latencyMs
+        _testState.value = WifiConnectionTestState.Success(
+            latencyMs = latencyMs,
+            serverName = serverName,
+            ip = senderIp
+        )
+    }
+
+    fun setLastPongTimeForTest(timeMs: Long) {
+        lastPongReceivedTime = timeMs
     }
 
     fun startHeartbeat() {
@@ -149,14 +202,12 @@ class NetworkStreamManager(private val context: Context) {
                     }
                     sendRaw(pingJson.toString().toByteArray())
 
-                    // If no pong for >6 seconds, mark offline
-                    if (lastPongReceivedTime > 0 && (System.currentTimeMillis() - lastPongReceivedTime) > 6000) {
-                        isPcOnline.value = false
-                    }
+                    checkHeartbeatTimeout()
                 } catch (e: Exception) {
+                    networkErrorCount.value++
                     // Ignore transient network hiccups
                 }
-                delay(3000)
+                delay(heartbeatIntervalMs)
             }
         }
     }
@@ -328,16 +379,35 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
-    private fun sendRaw(data: ByteArray, targetIp: String = pcIpAddress) {
-        try {
-            if (sendSocket == null || sendSocket?.isClosed == true) {
-                initSockets()
+    fun sendRaw(data: ByteArray, targetIp: String = pcIpAddress, retries: Int = maxRetryAttempts) {
+        var attempts = 0
+        var sent = false
+        var lastErr: Exception? = null
+
+        while (attempts < retries && !sent) {
+            attempts++
+            try {
+                if (sendSocket == null || sendSocket?.isClosed == true) {
+                    initSockets()
+                }
+                val addr = InetAddress.getByName(targetIp)
+                val packet = DatagramPacket(data, data.size, addr, pcPort)
+                sendSocket?.send(packet)
+                packetsSentCount.value++
+                sent = true
+            } catch (e: Exception) {
+                lastErr = e
+                networkErrorCount.value++
+                if (attempts < retries) {
+                    try {
+                        Thread.sleep(retryBackoffMs)
+                    } catch (_: InterruptedException) {}
+                }
             }
-            val addr = InetAddress.getByName(targetIp)
-            val packet = DatagramPacket(data, data.size, addr, pcPort)
-            sendSocket?.send(packet)
-        } catch (e: Exception) {
-            _logCallback.value = "[UDP ERR] To $targetIp:$pcPort: ${e.message}"
+        }
+
+        if (!sent && lastErr != null) {
+            _logCallback.value = "[UDP ERR] Failed sending to $targetIp:$pcPort after $retries attempts: ${lastErr.message}"
         }
     }
 

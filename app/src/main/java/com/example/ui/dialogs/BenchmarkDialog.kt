@@ -1,5 +1,9 @@
 package com.example.ui.dialogs
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
@@ -32,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,6 +63,7 @@ fun BenchmarkDialog(
 ) {
     val state by viewModel.benchmarkState.collectAsState()
     val pcIp = viewModel.networkManager.pcIpAddress
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = {
@@ -206,11 +213,42 @@ fun BenchmarkDialog(
                         // Grid metrics
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             MetricRow("Min / P50 / Max Latency", "${report.minLatencyMs}ms / ${report.medianLatencyMs}ms / ${report.maxLatencyMs}ms")
-                            MetricRow("95th Percentile (P95)", "${report.p95LatencyMs}ms")
-                            MetricRow("RFC 3550 Jitter", "${String.format(Locale.US, "%.2f", report.jitterMs)}ms")
+                            MetricRow("P90 / P95 / P99 Latency", "${report.p90LatencyMs}ms / ${report.p95LatencyMs}ms / ${report.p99LatencyMs}ms")
+                            MetricRow("RFC 3550 Jitter", "${String.format(Locale.US, "%.2f", report.jitterMs)}ms (σ ${String.format(Locale.US, "%.2f", report.jitterStdDevMs)}ms)")
                             MetricRow("Packet Loss", "${String.format(Locale.US, "%.1f", report.pingLossPct)}% (${report.pingsSent - report.pongsReceived} lost)")
-                            MetricRow("Stream Frequency", "${String.format(Locale.US, "%.1f", report.streamMeasuredHz)} Hz")
+                            MetricRow("Stream Throughput", "${String.format(Locale.US, "%.1f", report.streamMeasuredHz)} Hz")
                             MetricRow("Stream Packets Acked", "${report.streamPacketsAcked} / ${report.streamPacketsSent}")
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val summary = buildString {
+                                    appendLine("GlidePad Network Benchmark Report")
+                                    appendLine("Target: ${report.targetIp}:${report.targetPort}")
+                                    appendLine("Grade: ${report.grade}")
+                                    appendLine("Min/P50/Max Latency: ${report.minLatencyMs}ms / ${report.medianLatencyMs}ms / ${report.maxLatencyMs}ms")
+                                    appendLine("P90/P95/P99 Latency: ${report.p90LatencyMs}ms / ${report.p95LatencyMs}ms / ${report.p99LatencyMs}ms")
+                                    appendLine("RFC 3550 Jitter: ${String.format(Locale.US, "%.2f", report.jitterMs)}ms (std dev: ${String.format(Locale.US, "%.2f", report.jitterStdDevMs)}ms)")
+                                    appendLine("Packet Loss: ${String.format(Locale.US, "%.1f", report.pingLossPct)}% (${report.pingsSent - report.pongsReceived} lost)")
+                                    appendLine("Stream Hz: ${String.format(Locale.US, "%.1f", report.streamMeasuredHz)} Hz (${report.streamPacketsAcked}/${report.streamPacketsSent} acked)")
+                                    appendLine("Recommendation: ${report.recommendation}")
+                                }
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("GlidePad Benchmark", summary)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Benchmark diagnostics copied to clipboard!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark700),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("copy_benchmark_summary_button")
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Diagnostic Summary", fontSize = 11.sp, color = NeonCyan)
                         }
                     }
 

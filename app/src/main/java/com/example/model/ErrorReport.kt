@@ -8,7 +8,7 @@ data class ErrorReport(
     val targetIp: String = "",
     val userComments: String = "",
     val recentLogs: List<String> = emptyList(),
-    val appVersion: String = "4.0",
+    val appVersion: String = "5.0",
     val osVersion: String = android.os.Build.VERSION.RELEASE ?: "Unknown"
 ) {
     fun toMap(): Map<String, Any> {

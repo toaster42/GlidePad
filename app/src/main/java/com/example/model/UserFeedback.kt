@@ -6,7 +6,7 @@ data class UserFeedback(
     val title: String = "",
     val description: String = "",
     val category: String = "FEATURE",
-    val appVersion: String = "4.0",
+    val appVersion: String = "5.0",
     val userEmail: String = ""
 ) {
     fun toMap(): Map<String, Any> {

@@ -682,7 +682,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             title = title,
             description = description,
             category = category,
-            appVersion = "4.0",
+            appVersion = "5.0",
             userEmail = user.email ?: ""
         )
         viewModelScope.launch {
@@ -714,7 +714,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             targetIp = networkManager.pcIpAddress,
             userComments = userComments.take(1000),
             recentLogs = recentLogs,
-            appVersion = "4.0"
+            appVersion = "5.0"
         )
         viewModelScope.launch {
             val res = errorReportsRepo.submitErrorReport(report)
