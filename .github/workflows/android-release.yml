@@ -55,13 +55,20 @@ jobs:
 
       - name: Setup release keystore
         run: |
-          if [ ! -f my-upload-key.jks ]; then
+          if [ ! -f my-upload-key.jks ] && [ ! -f app/my-upload-key.jks ]; then
             if [ -n "$KEYSTORE_BASE64" ]; then
               echo "$KEYSTORE_BASE64" | base64 -d > my-upload-key.jks
             else
               echo "Generating release keystore for CI..."
               keytool -genkey -v -keystore my-upload-key.jks -storepass "${STORE_PASSWORD:-android}" -alias "${KEY_ALIAS:-upload}" -keypass "${KEY_PASSWORD:-android}" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=GlidePad Release,O=GlidePad,C=US"
             fi
+          fi
+          # Ensure keystore is present at both repository root and app/ directory for Gradle resolution
+          if [ -f my-upload-key.jks ]; then
+            cp my-upload-key.jks app/my-upload-key.jks
+          fi
+          if [ -f app/my-upload-key.jks ]; then
+            cp app/my-upload-key.jks my-upload-key.jks
           fi
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -74,7 +81,7 @@ jobs:
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'android' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
-          KEYSTORE_PATH: my-upload-key.jks
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
