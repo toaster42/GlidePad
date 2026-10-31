@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "Macro": {
+      "collection": "users/{userId}/macros",
+      "fields": {
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "shortcutKeys": { "type": "array" },
+        "actionType": { "type": "string" },
+        "targetPayload": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      }
+    },
+    "PcProfile": {
+      "collection": "users/{userId}/pc_profiles",
+      "fields": {
+        "name": { "type": "string" },
+        "ipAddress": { "type": "string" },
+        "port": { "type": "number" },
+        "macAddress": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "pointerSensitivity": { "type": "number" },
+        "accelerationMultiplier": { "type": "number" },
+        "accelerationProfile": { "type": "string" },
+        "updatedAt": { "type": "timestamp" }
+      }
+    },
+    "UserFeedback": {
+      "collection": "feedback",
+      "fields": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "appVersion": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "ErrorReport": {
+      "collection": "reports",
+      "fields": {
+        "userId": { "type": "string" },
+        "connectionMode": { "type": "string" },
+        "targetIp": { "type": "string" },
+        "errorMessage": { "type": "string" },
+        "userComments": { "type": "string" },
+        "recentLogs": { "type": "array" },
+        "appVersion": { "type": "string" },
+        "osVersion": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    }
+  }
+}

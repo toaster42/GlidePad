@@ -98,6 +98,7 @@ fun ConnectionDialog(
     }
 
     var pcIpInput by remember { mutableStateOf(viewModel.networkManager.pcIpAddress) }
+    var showBenchmarkDialog by remember { mutableStateOf(false) }
     val testState by viewModel.networkManager.testState.collectAsState()
     val pairedDevices = remember { viewModel.bluetoothManager.getBondedDevices() }
     val phoneIp = remember { viewModel.networkManager.getDeviceLocalIp() }
@@ -408,6 +409,21 @@ fun ConnectionDialog(
                             Text("Use Wi-Fi Connection", color = SurfaceDark900, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Button(
+                            onClick = { showBenchmarkDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark700),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("run_benchmark_button")
+                        ) {
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Run Network Latency Benchmark", color = TextPrimary, fontSize = 12.sp)
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Copy Receiver Script Button
@@ -485,4 +501,11 @@ fun ConnectionDialog(
         containerColor = SurfaceDark800,
         shape = RoundedCornerShape(16.dp)
     )
+
+    if (showBenchmarkDialog) {
+        BenchmarkDialog(
+            viewModel = viewModel,
+            onDismiss = { showBenchmarkDialog = false }
+        )
+    }
 }

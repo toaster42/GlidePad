@@ -2,22 +2,34 @@ package com.example
 
 import android.app.Application
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.PreferencesManager
+import com.example.data.repository.CloudMacrosRepository
+import com.example.data.repository.ErrorReportsRepository
+import com.example.data.repository.FeedbackRepository
+import com.example.data.repository.PcProfilesRepository
 import com.example.engine.TouchpadEngine
 import com.example.model.AccelerationProfile
+import com.example.model.CloudMacro
 import com.example.model.ConnectionMode
 import com.example.model.ConnectionStatus
 import com.example.model.DiagnosticStats
+import com.example.model.ErrorReport
 import com.example.model.GestureAction
 import com.example.model.GestureType
 import com.example.model.HapticLevel
 import com.example.model.MacroItem
+import com.example.model.SavedPcProfile
 import com.example.model.TouchpadSettings
+import com.example.model.UserFeedback
+import com.example.service.AuthManager
 import com.example.service.BluetoothHidManager
 import com.example.service.HapticFeedbackHelper
 import com.example.service.NetworkStreamManager
+import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +61,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val hapticHelper = HapticFeedbackHelper(application)
     val bluetoothManager = BluetoothHidManager(application)
     val networkManager = NetworkStreamManager(application)
+
+    // Firebase & Cloud Repositories
+    val authManager = AuthManager(application)
+    val cloudMacrosRepo = CloudMacrosRepository(application)
+    val pcProfilesRepo = PcProfilesRepository(application)
+    val feedbackRepo = FeedbackRepository(application)
+    val errorReportsRepo = ErrorReportsRepository(application)
+
+    // Benchmark Engine
+    val benchmarkEngine = com.example.engine.BenchmarkEngine(viewModelScope)
+    val benchmarkState: StateFlow<com.example.engine.BenchmarkState> = benchmarkEngine.state
+
+    val currentUser: StateFlow<FirebaseUser?> = authManager.currentUser
+
+    private val _cloudMacros = MutableStateFlow<List<CloudMacro>>(emptyList())
+    val cloudMacros: StateFlow<List<CloudMacro>> = _cloudMacros.asStateFlow()
+
+    private val _savedProfiles = MutableStateFlow<List<SavedPcProfile>>(emptyList())
+    val savedProfiles: StateFlow<List<SavedPcProfile>> = _savedProfiles.asStateFlow()
+
+    private val _syncMessage = MutableStateFlow<String?>(null)
+    val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
+
+    private var macroSyncJob: Job? = null
+    private var profileSyncJob: Job? = null
 
     val settings: StateFlow<TouchpadSettings> = preferencesManager.settings
     val stats: StateFlow<DiagnosticStats> = bluetoothManager.stats
@@ -127,14 +164,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
+            networkManager.liveLatencyMs.collect { latency ->
+                if (stats.value.connectionMode == ConnectionMode.LOCAL_WIFI) {
+                    bluetoothManager.updateWifiLatency(latency, networkManager.isPcOnline.value)
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            networkManager.isPcOnline.collect { online ->
+                if (stats.value.connectionMode == ConnectionMode.LOCAL_WIFI) {
+                    bluetoothManager.updateWifiOnline(online, networkManager.pcIpAddress)
+                }
+            }
+        }
+
+        viewModelScope.launch {
             networkManager.testState.collect { state ->
                 when (state) {
                     is com.example.service.WifiConnectionTestState.Success -> {
                         preferencesManager.setSavedPcIp(state.ip)
                         preferencesManager.setSavedConnectionMode(ConnectionMode.LOCAL_WIFI.name)
                         bluetoothManager.setWifiMode(state.ip)
+                        networkManager.startHeartbeat()
                     }
                     else -> {}
+                }
+            }
+        }
+
+        if (savedModeStr == ConnectionMode.LOCAL_WIFI.name) {
+            networkManager.startHeartbeat()
+        }
+
+        // Cloud sync lifecycle when user signs in or out
+        viewModelScope.launch {
+            currentUser.collect { user ->
+                macroSyncJob?.cancel()
+                profileSyncJob?.cancel()
+                if (user != null) {
+                    macroSyncJob = viewModelScope.launch {
+                        cloudMacrosRepo.observeMacros(user.uid).collect { macros ->
+                            _cloudMacros.value = macros
+                        }
+                    }
+                    profileSyncJob = viewModelScope.launch {
+                        pcProfilesRepo.observeProfiles(user.uid).collect { profiles ->
+                            _savedProfiles.value = profiles
+                        }
+                    }
+                } else {
+                    _cloudMacros.value = emptyList()
+                    _savedProfiles.value = emptyList()
                 }
             }
         }
@@ -396,15 +477,263 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.setSavedConnectionMode(mode.name)
         when (mode) {
-            ConnectionMode.BLUETOOTH_HID -> bluetoothManager.setBluetoothMode()
+            ConnectionMode.BLUETOOTH_HID -> {
+                networkManager.stopHeartbeat()
+                bluetoothManager.setBluetoothMode()
+            }
             ConnectionMode.LOCAL_WIFI -> {
                 if (param.isNotBlank()) {
                     networkManager.pcIpAddress = param
                     preferencesManager.setSavedPcIp(param)
                 }
                 bluetoothManager.setWifiMode(networkManager.pcIpAddress)
+                networkManager.startHeartbeat()
             }
-            ConnectionMode.SIMULATION -> bluetoothManager.setSimulationMode()
+            ConnectionMode.SIMULATION -> {
+                networkManager.stopHeartbeat()
+                bluetoothManager.setSimulationMode()
+            }
         }
+    }
+
+    fun openUrlOnPc(url: String) {
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        networkManager.sendOpenUrl(url)
+        bluetoothManager.recordPacketSent("OPEN URL: $url")
+        _virtualScreen.value = _virtualScreen.value.copy(
+            recentGestureNotification = "Opened URL: $url"
+        )
+    }
+
+    fun sendSystemCmdToPc(command: String, displayLabel: String) {
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        networkManager.sendSystemCommand(command)
+        bluetoothManager.recordPacketSent("SYSTEM CMD: $command")
+        _virtualScreen.value = _virtualScreen.value.copy(
+            recentGestureNotification = displayLabel
+        )
+    }
+
+    fun sendWakeOnLan(macAddress: String) {
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        preferencesManager.setSavedMacAddress(macAddress)
+        networkManager.sendWakeOnLan(macAddress)
+        bluetoothManager.recordPacketSent("WOL PACKET: $macAddress")
+        _virtualScreen.value = _virtualScreen.value.copy(
+            recentGestureNotification = "WOL Sent to $macAddress"
+        )
+    }
+
+    fun sendClipboardTextToPc(text: String) {
+        if (text.isBlank()) return
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        networkManager.sendTextDirect(text)
+        bluetoothManager.recordPacketSent("CLIPBOARD SENT (${text.length} chars)")
+        _virtualScreen.value = _virtualScreen.value.copy(
+            recentGestureNotification = "Pasted Clipboard to PC"
+        )
+    }
+
+    // Google Sign-In & Authentication
+    fun signInWithGoogle(context: Context, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val result = authManager.signInWithGoogle(context)
+            if (result.isSuccess) {
+                _syncMessage.value = "Signed in as ${result.getOrNull()?.email}"
+                onResult(true, null)
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Sign-in failed"
+                _syncMessage.value = "Sign-in error: $errorMsg"
+                onResult(false, errorMsg)
+            }
+        }
+    }
+
+    fun signOut(context: Context) {
+        viewModelScope.launch {
+            authManager.signOut(context)
+            _syncMessage.value = "Signed out from Google Account"
+        }
+    }
+
+    fun clearSyncMessage() {
+        _syncMessage.value = null
+    }
+
+    // Cloud Macros Management
+    fun saveCloudMacro(macro: CloudMacro, onComplete: (Boolean, String?) -> Unit) {
+        val user = currentUser.value
+        if (user == null) {
+            onComplete(false, "Must be signed in to sync macros")
+            return
+        }
+        viewModelScope.launch {
+            val res = cloudMacrosRepo.saveMacro(user.uid, macro)
+            if (res.isSuccess) {
+                _syncMessage.value = "Saved macro \"${macro.label}\" to cloud"
+                onComplete(true, null)
+            } else {
+                onComplete(false, res.exceptionOrNull()?.message)
+            }
+        }
+    }
+
+    fun deleteCloudMacro(macroId: String, onComplete: (Boolean) -> Unit) {
+        val user = currentUser.value ?: return
+        viewModelScope.launch {
+            val res = cloudMacrosRepo.deleteMacro(user.uid, macroId)
+            onComplete(res.isSuccess)
+        }
+    }
+
+    fun executeCloudMacro(macro: CloudMacro) {
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        when (macro.actionType) {
+            "URL" -> {
+                if (macro.targetPayload.isNotBlank()) openUrlOnPc(macro.targetPayload)
+            }
+            "SYSTEM_CMD" -> {
+                if (macro.targetPayload.isNotBlank()) sendSystemCmdToPc(macro.targetPayload, macro.label)
+            }
+            else -> {
+                if (macro.shortcutKeys.isNotEmpty()) {
+                    networkManager.sendKeyPacket(macro.shortcutKeys, "macro")
+                    bluetoothManager.recordPacketSent("CLOUD MACRO: ${macro.label}")
+                    _virtualScreen.value = _virtualScreen.value.copy(
+                        recentGestureNotification = "Macro: ${macro.label}"
+                    )
+                }
+            }
+        }
+    }
+
+    // Cloud PC Profiles Management
+    fun saveCurrentAsPcProfile(name: String, onComplete: (Boolean, String?) -> Unit) {
+        val user = currentUser.value
+        if (user == null) {
+            onComplete(false, "Must be signed in to sync PC profiles")
+            return
+        }
+        val currentSettings = settings.value
+        val profile = SavedPcProfile(
+            name = name,
+            ipAddress = networkManager.pcIpAddress,
+            port = 8889,
+            macAddress = preferencesManager.getSavedMacAddress(),
+            pointerSensitivity = currentSettings.pointerSensitivity.toDouble(),
+            accelerationMultiplier = currentSettings.accelerationMultiplier.toDouble(),
+            accelerationProfile = currentSettings.accelerationProfile.name
+        )
+        viewModelScope.launch {
+            val res = pcProfilesRepo.saveProfile(user.uid, profile)
+            if (res.isSuccess) {
+                _syncMessage.value = "Saved profile \"$name\" to cloud"
+                onComplete(true, null)
+            } else {
+                onComplete(false, res.exceptionOrNull()?.message)
+            }
+        }
+    }
+
+    fun deletePcProfile(profileId: String, onComplete: (Boolean) -> Unit) {
+        val user = currentUser.value ?: return
+        viewModelScope.launch {
+            val res = pcProfilesRepo.deleteProfile(user.uid, profileId)
+            onComplete(res.isSuccess)
+        }
+    }
+
+    fun applyPcProfile(profile: SavedPcProfile) {
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        preferencesManager.setSavedPcIp(profile.ipAddress)
+        networkManager.pcIpAddress = profile.ipAddress
+        if (profile.macAddress.isNotBlank()) {
+            preferencesManager.setSavedMacAddress(profile.macAddress)
+        }
+        val profileEnum = try {
+            AccelerationProfile.valueOf(profile.accelerationProfile)
+        } catch (e: Exception) {
+            AccelerationProfile.DYNAMIC
+        }
+        val updatedSettings = settings.value.copy(
+            pointerSensitivity = profile.pointerSensitivity.toFloat(),
+            accelerationMultiplier = profile.accelerationMultiplier.toFloat(),
+            accelerationProfile = profileEnum
+        )
+        preferencesManager.updateSettings(updatedSettings)
+        bluetoothManager.setWifiMode(profile.ipAddress)
+        _syncMessage.value = "Applied profile \"${profile.name}\""
+    }
+
+    // Feedback & Error Reporting
+    fun submitFeedback(
+        title: String,
+        description: String,
+        category: String,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        val user = currentUser.value
+        if (user == null) {
+            onComplete(false, "Please sign in to submit feedback")
+            return
+        }
+        val feedback = UserFeedback(
+            userId = user.uid,
+            title = title,
+            description = description,
+            category = category,
+            appVersion = "4.0",
+            userEmail = user.email ?: ""
+        )
+        viewModelScope.launch {
+            val res = feedbackRepo.submitFeedback(feedback)
+            if (res.isSuccess) {
+                _syncMessage.value = "Thank you! Your feedback has been sent."
+                onComplete(true, null)
+            } else {
+                onComplete(false, res.exceptionOrNull()?.message)
+            }
+        }
+    }
+
+    fun submitErrorReport(
+        userComments: String,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        val user = currentUser.value
+        if (user == null) {
+            onComplete(false, "Please sign in to submit a diagnostic report")
+            return
+        }
+        val recentLogs = stats.value.recentLogs.takeLast(10)
+        val lastError = if (recentLogs.isNotEmpty()) recentLogs.last() else "User triggered diagnostic snapshot"
+        val report = ErrorReport(
+            userId = user.uid,
+            errorMessage = lastError.take(1000),
+            connectionMode = stats.value.connectionMode.name,
+            targetIp = networkManager.pcIpAddress,
+            userComments = userComments.take(1000),
+            recentLogs = recentLogs,
+            appVersion = "4.0"
+        )
+        viewModelScope.launch {
+            val res = errorReportsRepo.submitErrorReport(report)
+            if (res.isSuccess) {
+                _syncMessage.value = "Diagnostic report submitted successfully."
+                onComplete(true, null)
+            } else {
+                onComplete(false, res.exceptionOrNull()?.message)
+            }
+        }
+    }
+
+    // Benchmark Controls
+    fun runNetworkBenchmark(targetIp: String = networkManager.pcIpAddress) {
+        hapticHelper.gestureTriggered(settings.value.hapticLevel)
+        benchmarkEngine.runFullBenchmark(targetIp)
+    }
+
+    fun resetBenchmark() {
+        benchmarkEngine.reset()
     }
 }

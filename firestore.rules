@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidMacro(data) {
+      return data.label is string && data.label.size() > 0 && data.label.size() <= 60
+        && (!('description' in data) || (data.description is string && data.description.size() <= 120))
+        && (!('actionType' in data) || (data.actionType in ['KEYBOARD', 'URL', 'SYSTEM_CMD']))
+        && (!('targetPayload' in data) || data.targetPayload is string)
+        && (!('shortcutKeys' in data) || data.shortcutKeys is list)
+        && (!('sortOrder' in data) || data.sortOrder is number);
+    }
+
+    function isValidPcProfile(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 60
+        && data.ipAddress is string && data.ipAddress.size() > 0
+        && (!('port' in data) || (data.port is number && data.port >= 1 && data.port <= 65535))
+        && (!('macAddress' in data) || data.macAddress is string)
+        && (!('isDefault' in data) || data.isDefault is bool)
+        && (!('pointerSensitivity' in data) || data.pointerSensitivity is number)
+        && (!('accelerationMultiplier' in data) || data.accelerationMultiplier is number)
+        && (!('accelerationProfile' in data) || data.accelerationProfile is string);
+    }
+
+    function isValidFeedback(data) {
+      return data.userId == request.auth.uid
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 120
+        && data.description is string && data.description.size() > 0 && data.description.size() <= 2000
+        && (!('category' in data) || (data.category in ['FEATURE', 'GESTURE', 'WIFI', 'KEYBOARD', 'OTHER']))
+        && (!('appVersion' in data) || data.appVersion is string)
+        && (!('userEmail' in data) || data.userEmail is string);
+    }
+
+    function isValidReport(data) {
+      return data.userId == request.auth.uid
+        && data.errorMessage is string && data.errorMessage.size() > 0 && data.errorMessage.size() <= 1000
+        && (!('connectionMode' in data) || data.connectionMode is string)
+        && (!('targetIp' in data) || data.targetIp is string)
+        && (!('userComments' in data) || (data.userComments is string && data.userComments.size() <= 1000))
+        && (!('recentLogs' in data) || data.recentLogs is list)
+        && (!('appVersion' in data) || data.appVersion is string)
+        && (!('osVersion' in data) || data.osVersion is string);
+    }
+
+    // User Private Space
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /macros/{macroId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidMacro(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /pc_profiles/{profileId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidPcProfile(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Feedback Collection
+    match /feedback/{feedbackId} {
+      allow create: if isAuthenticated() && isValidFeedback(request.resource.data);
+      allow read, update, delete: if false;
+    }
+
+    // Diagnostic Reports Collection
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() && isValidReport(request.resource.data);
+      allow read, update, delete: if false;
+    }
+  }
+}

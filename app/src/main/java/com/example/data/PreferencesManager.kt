@@ -103,11 +103,19 @@ class PreferencesManager(context: Context) {
     }
 
     fun getSavedConnectionMode(): String {
-        return prefs.getString(KEY_CONNECTION_MODE, "BLUETOOTH_HID") ?: "BLUETOOTH_HID"
+        return prefs.getString(KEY_CONNECTION_MODE, "LOCAL_WIFI") ?: "LOCAL_WIFI"
     }
 
     fun setSavedConnectionMode(mode: String) {
         prefs.edit().putString(KEY_CONNECTION_MODE, mode).apply()
+    }
+
+    fun getSavedMacAddress(): String {
+        return prefs.getString(KEY_MAC_ADDRESS, "00:11:22:33:44:55") ?: "00:11:22:33:44:55"
+    }
+
+    fun setSavedMacAddress(mac: String) {
+        prefs.edit().putString(KEY_MAC_ADDRESS, mac).apply()
     }
 
     fun resetToDefaults() {
@@ -130,5 +138,6 @@ class PreferencesManager(context: Context) {
         private const val KEY_SHOW_SCROLL_STRIP = "key_show_scroll_strip"
         private const val KEY_PC_IP = "key_pc_ip_address"
         private const val KEY_CONNECTION_MODE = "key_last_conn_mode"
+        private const val KEY_MAC_ADDRESS = "key_mac_address"
     }
 }

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GlidePad</string>
+    <string name="default_web_client_id" translatable="false">843892215261-p0aatnhvo599g5muq43okbrnjnhupjhu.apps.googleusercontent.com</string>
 </resources>

@@ -2,7 +2,6 @@ package com.example.service
 
 import android.content.Context
 import android.net.wifi.WifiManager
-import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +36,10 @@ class NetworkStreamManager(private val context: Context) {
     private var sendSocket: DatagramSocket? = null
     private var receiveSocket: DatagramSocket? = null
     private var receiveJob: Job? = null
+    private var heartbeatJob: Job? = null
+
+    val isPcOnline = MutableStateFlow(false)
+    val liveLatencyMs = MutableStateFlow(3L)
 
     private val _testState = MutableStateFlow<WifiConnectionTestState>(WifiConnectionTestState.Idle)
     val testState: StateFlow<WifiConnectionTestState> = _testState.asStateFlow()
@@ -45,6 +48,7 @@ class NetworkStreamManager(private val context: Context) {
     val logCallback: StateFlow<String?> = _logCallback.asStateFlow()
 
     private var pingStartTime: Long = 0
+    private var lastPongReceivedTime: Long = 0
 
     init {
         initSockets()
@@ -69,7 +73,6 @@ class NetworkStreamManager(private val context: Context) {
         receiveJob = scope.launch {
             try {
                 if (receiveSocket == null || receiveSocket?.isClosed == true) {
-                    // Bind to ephemeral port or client response port
                     receiveSocket = DatagramSocket().apply {
                         soTimeout = 3000
                     }
@@ -83,7 +86,7 @@ class NetworkStreamManager(private val context: Context) {
                         val text = String(packet.data, 0, packet.length)
                         handleIncomingPacket(text, packet.address.hostAddress ?: "")
                     } catch (e: SocketTimeoutException) {
-                        // normal timeout, keep loop alive
+                        // Keep receiver alive
                     } catch (e: Exception) {
                         if (!isActive) break
                         delay(500)
@@ -100,29 +103,67 @@ class NetworkStreamManager(private val context: Context) {
             val json = JSONObject(rawJson)
             when (json.optString("type")) {
                 "pong" -> {
-                    val rtt = if (pingStartTime > 0) System.currentTimeMillis() - pingStartTime else 4
+                    val now = System.currentTimeMillis()
+                    val rtt = if (pingStartTime > 0) (now - pingStartTime).coerceAtLeast(1) else 3L
+                    lastPongReceivedTime = now
+                    isPcOnline.value = true
+                    liveLatencyMs.value = rtt
+
                     val server = json.optString("name", "GlidePad PC")
                     _testState.value = WifiConnectionTestState.Success(
                         latencyMs = rtt,
                         serverName = server,
                         ip = senderIp
                     )
-                    _logCallback.value = "[WIFI] Pong received from $server ($senderIp) in ${rtt}ms"
+                    _logCallback.value = "[WIFI PONG] $server ($senderIp) • ${rtt}ms"
                 }
                 "announce" -> {
                     val server = json.optString("name", "GlidePad PC")
                     pcIpAddress = senderIp
+                    isPcOnline.value = true
+                    liveLatencyMs.value = 3L
                     _testState.value = WifiConnectionTestState.Success(
                         latencyMs = 3,
                         serverName = server,
                         ip = senderIp
                     )
-                    _logCallback.value = "[WIFI] Discovered PC: $server at $senderIp"
+                    _logCallback.value = "[WIFI DISCOVERY] Discovered PC: $server at $senderIp"
                 }
             }
         } catch (e: Exception) {
-            Log.w(tag, "Failed to parse incoming UDP packet: $rawJson")
+            Log.w(tag, "Failed to parse incoming packet: $rawJson")
         }
+    }
+
+    fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (isActive) {
+                try {
+                    pingStartTime = System.currentTimeMillis()
+                    val clientPort = receiveSocket?.localPort ?: 0
+                    val pingJson = JSONObject().apply {
+                        put("type", "ping")
+                        put("client_port", clientPort)
+                        put("time", pingStartTime)
+                    }
+                    sendRaw(pingJson.toString().toByteArray())
+
+                    // If no pong for >6 seconds, mark offline
+                    if (lastPongReceivedTime > 0 && (System.currentTimeMillis() - lastPongReceivedTime) > 6000) {
+                        isPcOnline.value = false
+                    }
+                } catch (e: Exception) {
+                    // Ignore transient network hiccups
+                }
+                delay(3000)
+            }
+        }
+    }
+
+    fun stopHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
     }
 
     fun testConnection(targetIp: String = pcIpAddress) {
@@ -139,7 +180,6 @@ class NetworkStreamManager(private val context: Context) {
                 }
                 sendRaw(pingJson.toString().toByteArray(), targetIp)
 
-                // Wait up to 2.5s for response
                 delay(2500)
                 if (_testState.value is WifiConnectionTestState.Testing) {
                     _testState.value = WifiConnectionTestState.Error(
@@ -164,11 +204,10 @@ class NetworkStreamManager(private val context: Context) {
                     put("client_port", clientPort)
                 }
                 val data = discoverJson.toString().toByteArray()
-                // Send broadcast to 255.255.255.255
                 val broadcastAddr = InetAddress.getByName("255.255.255.255")
                 val packet = DatagramPacket(data, data.size, broadcastAddr, pcPort)
                 sendSocket?.send(packet)
-                _logCallback.value = "[WIFI] Broadcast discovery packet sent on port $pcPort"
+                _logCallback.value = "[WIFI] Broadcast discovery sent on port $pcPort"
 
                 delay(3000)
                 if (_testState.value is WifiConnectionTestState.Testing) {
@@ -228,6 +267,67 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    fun sendOpenUrl(url: String) {
+        scope.launch {
+            try {
+                val cleanUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    "https://$url"
+                } else url
+                val json = JSONObject().apply {
+                    put("type", "open_url")
+                    put("url", cleanUrl)
+                }
+                sendRaw(json.toString().toByteArray())
+                _logCallback.value = "[WIFI URL] Opened: $cleanUrl"
+            } catch (e: Exception) {
+                Log.w(tag, "sendOpenUrl failed", e)
+            }
+        }
+    }
+
+    fun sendSystemCommand(command: String) {
+        scope.launch {
+            try {
+                val json = JSONObject().apply {
+                    put("type", "system_cmd")
+                    put("command", command)
+                }
+                sendRaw(json.toString().toByteArray())
+                _logCallback.value = "[WIFI CMD] $command"
+            } catch (e: Exception) {
+                Log.w(tag, "sendSystemCommand failed", e)
+            }
+        }
+    }
+
+    fun sendWakeOnLan(macAddress: String) {
+        scope.launch {
+            try {
+                val cleanMac = macAddress.replace(":", "").replace("-", "")
+                if (cleanMac.length != 12) {
+                    _logCallback.value = "[WOL ERR] Invalid MAC address: $macAddress"
+                    return@launch
+                }
+                val macBytes = ByteArray(6) { i ->
+                    cleanMac.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+                }
+                val bytes = ByteArray(6 + 16 * 6)
+                for (i in 0 until 6) bytes[i] = 0xFF.toByte()
+                for (i in 0 until 16) {
+                    System.arraycopy(macBytes, 0, bytes, 6 + i * 6, 6)
+                }
+                val broadcastAddr = InetAddress.getByName("255.255.255.255")
+                val packet9 = DatagramPacket(bytes, bytes.size, broadcastAddr, 9)
+                val packet7 = DatagramPacket(bytes, bytes.size, broadcastAddr, 7)
+                sendSocket?.send(packet9)
+                sendSocket?.send(packet7)
+                _logCallback.value = "[WOL] Magic Packet broadcast sent to $macAddress"
+            } catch (e: Exception) {
+                _logCallback.value = "[WOL ERR] ${e.message}"
+            }
+        }
+    }
+
     private fun sendRaw(data: ByteArray, targetIp: String = pcIpAddress) {
         try {
             if (sendSocket == null || sendSocket?.isClosed == true) {
@@ -265,7 +365,7 @@ class NetworkStreamManager(private val context: Context) {
     companion object {
         val PYTHON_RECEIVER_SCRIPT = """
 # =====================================================================
-#  GlidePad Ultra-Low-Latency PC Receiver (v2.0)
+#  GlidePad Ultra-Low-Latency PC Receiver (v2.1 - Wi-Fi Power Edition)
 # =====================================================================
 #  Requirements:
 #    pip install pynput
@@ -278,6 +378,8 @@ import socket
 import json
 import sys
 import platform
+import subprocess
+import webbrowser
 
 try:
     from pynput.mouse import Button, Controller as MouseController
@@ -295,7 +397,6 @@ UDP_PORT = 8089
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # Connect to public DNS to detect primary network interface IP
         s.connect(('8.8.8.8', 80))
         ip = s.getsockname()[0]
     except Exception:
@@ -311,16 +412,15 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sock.bind(('0.0.0.0', UDP_PORT))
 
-print("=" * 62)
-print("  GLIDEPAD PC RECEIVER ACTIVE")
-print("=" * 62)
+print("=" * 64)
+print("  GLIDEPAD PC RECEIVER ACTIVE (v2.1)")
+print("=" * 64)
 print(f"  System       : {platform.system()} ({hostname})")
 print(f"  UDP Port     : {UDP_PORT}")
 print(f"  >>> ENTER THIS IP IN GLIDEPAD APP:  {local_ip}")
-print("=" * 62)
-print("  Waiting for phone touch events & keystrokes...\n")
+print("=" * 64)
+print("  Ready for touch gestures, keys, URLs & system commands...\n")
 
-# Map text keys to pynput Key objects
 SPECIAL_KEYS = {
     'Enter': Key.enter, 'Return': Key.enter,
     'Backspace': Key.backspace,
@@ -349,7 +449,7 @@ while True:
         msg = json.loads(data.decode('utf-8'))
         msg_type = msg.get('type')
 
-        # 1. PING / HANDSHAKE
+        # 1. PING / HEARTBEAT / AUTO-DISCOVER
         if msg_type in ('ping', 'discover'):
             client_port = msg.get('client_port', addr[1])
             resp = json.dumps({
@@ -357,9 +457,7 @@ while True:
                 'name': f"{hostname} ({platform.system()})",
                 'status': 'ok'
             }).encode('utf-8')
-            # Reply back to phone
             sock.sendto(resp, (addr[0], client_port if client_port else addr[1]))
-            print(f"[PING] Handshake from {addr[0]} -> Responded OK")
 
         # 2. MOUSE MOVEMENT, CLICKS, & SCROLL
         elif msg_type == 'mouse':
@@ -374,17 +472,17 @@ while True:
                 mouse.scroll(0, wheel)
 
             if btn != prev_btn:
-                # Left Click (Bit 1)
+                # Left Click
                 if (btn & 1) and not (prev_btn & 1):
                     mouse.press(Button.left)
                 elif not (btn & 1) and (prev_btn & 1):
                     mouse.release(Button.left)
-                # Right Click (Bit 2)
+                # Right Click
                 if (btn & 2) and not (prev_btn & 2):
                     mouse.press(Button.right)
                 elif not (btn & 2) and (prev_btn & 2):
                     mouse.release(Button.right)
-                # Middle Click (Bit 4)
+                # Middle Click
                 if (btn & 4) and not (prev_btn & 4):
                     mouse.press(Button.middle)
                 elif not (btn & 4) and (prev_btn & 4):
@@ -417,7 +515,43 @@ while True:
             for target_key in reversed(held):
                 keyboard.release(target_key)
 
-            print(f"[KEY] Action: {action} ({keys_str})")
+        # 5. OPEN WEB URL IN DEFAULT BROWSER
+        elif msg_type == 'open_url':
+            url = msg.get('url', '')
+            if url:
+                webbrowser.open(url)
+                print(f"[URL] Opened in browser: {url}")
+
+        # 6. SYSTEM COMMANDS (Terminal, Explorer, Task Manager, Lock)
+        elif msg_type == 'system_cmd':
+            cmd = msg.get('command', '')
+            print(f"[CMD] Received: {cmd}")
+            sys_name = platform.system()
+            if cmd == 'terminal':
+                if sys_name == 'Windows':
+                    subprocess.Popen('cmd.exe')
+                elif sys_name == 'Darwin':
+                    subprocess.Popen(['open', '-a', 'Terminal'])
+                else:
+                    subprocess.Popen('x-terminal-emulator')
+            elif cmd == 'explorer':
+                if sys_name == 'Windows':
+                    subprocess.Popen('explorer.exe')
+                elif sys_name == 'Darwin':
+                    subprocess.Popen(['open', '.'])
+                else:
+                    subprocess.Popen(['xdg-open', '.'])
+            elif cmd == 'taskmgr':
+                if sys_name == 'Windows':
+                    subprocess.Popen('taskmgr.exe')
+                elif sys_name == 'Darwin':
+                    subprocess.Popen(['open', '-a', 'Activity Monitor'])
+            elif cmd == 'lock':
+                if sys_name == 'Windows':
+                    import ctypes
+                    ctypes.windll.user32.LockWorkStation()
+                elif sys_name == 'Darwin':
+                    subprocess.Popen(['pmset', 'displaysleepnow'])
 
     except KeyboardInterrupt:
         print("\n[*] GlidePad Receiver stopped.")

@@ -301,6 +301,26 @@ class BluetoothHidManager(private val context: Context) {
         addLog("Connected to PC Receiver via Wi-Fi: $pcIp:8089")
     }
 
+    fun updateWifiLatency(latencyMs: Long, isOnline: Boolean) {
+        val current = _stats.value
+        if (current.connectionMode == ConnectionMode.LOCAL_WIFI) {
+            _stats.value = current.copy(
+                lastLatencyMs = latencyMs,
+                connectionStatus = if (isOnline) ConnectionStatus.CONNECTED else ConnectionStatus.PAIRING
+            )
+        }
+    }
+
+    fun updateWifiOnline(isOnline: Boolean, pcIp: String) {
+        val current = _stats.value
+        if (current.connectionMode == ConnectionMode.LOCAL_WIFI) {
+            _stats.value = current.copy(
+                connectionStatus = if (isOnline) ConnectionStatus.CONNECTED else ConnectionStatus.PAIRING,
+                connectedDeviceName = if (isOnline) "PC at $pcIp" else "PC Reconnecting..."
+            )
+        }
+    }
+
     fun setBluetoothMode() {
         _stats.value = _stats.value.copy(
             connectionMode = ConnectionMode.BLUETOOTH_HID
