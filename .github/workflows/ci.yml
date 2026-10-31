@@ -34,6 +34,18 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
+      - name: Setup google-services.json
+        run: |
+          if [ ! -f app/google-services.json ]; then
+            if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+              echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            else
+              echo '{"project_info":{"project_number":"843892215261","project_id":"gen-lang-client-0572362862","storage_bucket":""},"client":[{"client_info":{"mobilesdk_app_id":"1:843892215261:android:d821bdc7d102acfe89ba34","android_client_info":{"package_name":"com.aistudio.glidepad.kxvtwm"}},"oauth_client":[],"api_key":[{"current_key":"dummy_ci_key"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
+            fi
+          fi
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
       - name: Run Unit & Robolectric Tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
