@@ -144,4 +144,124 @@ class NetworkResilienceTest {
         // Verification: did not crash and error counter incremented
         assertTrue(networkManager.networkErrorCount.value >= initialErrors)
     }
+
+    @Test
+    fun testHeartbeatDeduplicationAndState() {
+        assertFalse(networkManager.isHeartbeatActive())
+        networkManager.startHeartbeat()
+        assertTrue(networkManager.isHeartbeatActive())
+
+        // Multiple calls should not crash or create duplicate background loops
+        networkManager.startHeartbeat()
+        assertTrue(networkManager.isHeartbeatActive())
+
+        networkManager.stopHeartbeat()
+        assertFalse(networkManager.isHeartbeatActive())
+    }
+
+    @Test
+    fun testTrackpadActivityUpdatesTimestamp() {
+        val before = System.currentTimeMillis()
+        networkManager.sendMousePacket(10, 20, 0, 0)
+        assertTrue(networkManager.lastMousePacketSentTime >= before)
+    }
+
+    @Test
+    fun testPingSuppressedDuringActiveTrackpadStreaming() {
+        val simulatedTime = 100000L
+        networkManager.lastMousePacketSentTime = simulatedTime
+
+        // 1. Within active streaming window (< 1200ms), ping must be suppressed
+        assertTrue("Trackpad should be marked active within 300ms", networkManager.isTrackpadActive(simulatedTime + 300L))
+        assertFalse("Heartbeat ping must be suppressed during active trackpad streaming to prioritize cursor bandwidth",
+            networkManager.shouldSendHeartbeatPing(simulatedTime + 300L))
+
+        // 2. Near edge of threshold (1199ms)
+        assertTrue(networkManager.isTrackpadActive(simulatedTime + 1199L))
+        assertFalse(networkManager.shouldSendHeartbeatPing(simulatedTime + 1199L))
+
+        // 3. When gesture ceases and threshold elapses (> 1200ms), ping resumes
+        assertFalse("Trackpad should be marked inactive after 1500ms", networkManager.isTrackpadActive(simulatedTime + 1500L))
+        assertTrue("Heartbeat ping must resume when trackpad is idle",
+            networkManager.shouldSendHeartbeatPing(simulatedTime + 1500L))
+    }
+
+    @Test
+    fun testPythonReceiverScriptBufferAndVersionIntegrity() {
+        val script = NetworkStreamManager.PYTHON_RECEIVER_SCRIPT
+
+        assertTrue("Python receiver must specify protocol version 2.3", script.contains("v2.3"))
+        assertTrue("Python receiver must configure SO_RCVBUF", script.contains("SO_RCVBUF"))
+        assertTrue("Python receiver must expand socket buffer to 65536 to prevent packet loss", script.contains("65536"))
+        assertTrue("Python receiver must bind UDP port 8089", script.contains("UDP_PORT = 8089"))
+        assertTrue("Python receiver must handle mouse event type", script.contains("elif msg_type == 'mouse':"))
+    }
+
+    @Test
+    fun testBenchmarkReceiverScriptBufferAndVersionIntegrity() {
+        val benchmarkScript = NetworkStreamManager.PYTHON_BENCHMARK_RECEIVER_SCRIPT
+
+        assertTrue("Benchmark receiver must specify protocol version 1.1", benchmarkScript.contains("v1.1"))
+        assertTrue("Benchmark receiver must configure SO_RCVBUF", benchmarkScript.contains("SO_RCVBUF"))
+        assertTrue("Benchmark receiver must expand socket buffer to 65536", benchmarkScript.contains("65536"))
+        assertTrue("Benchmark receiver must compute jitter", benchmarkScript.contains("jitter"))
+        assertTrue("Benchmark receiver must compute packet loss", benchmarkScript.contains("packet_loss_pct"))
+    }
+
+    @Test
+    fun testAutoDetectionPopulatesManualIpField() {
+        val initialIp = networkManager.targetPcIp.value
+
+        val announcePayload = """
+            {
+                "type": "announce",
+                "name": "AutoDiscovered-Host"
+            }
+        """.trimIndent()
+
+        val discoveredIp = "192.168.1.188"
+        val handled = networkManager.processIncomingPacket(announcePayload, discoveredIp)
+
+        assertTrue("Announce packet must be handled", handled)
+        assertEquals("Target PC IP must be updated to the detected remote IP", discoveredIp, networkManager.targetPcIp.value)
+        assertEquals("pcIpAddress must match the detected remote IP", discoveredIp, networkManager.pcIpAddress)
+        assertTrue("PC status must be marked online", networkManager.isPcOnline.value)
+    }
+
+    @Test
+    fun testLatencyCalculationPrecision() {
+        val now = System.currentTimeMillis()
+        networkManager.setPingStartTimeForTest(now - 12L)
+
+        val pongPayload = """
+            {
+                "type": "pong",
+                "name": "Test Host"
+            }
+        """.trimIndent()
+
+        val handled = networkManager.processIncomingPacket(pongPayload, "192.168.1.150")
+        assertTrue(handled)
+        assertTrue("Latency must be positive and non-zero", networkManager.liveLatencyMs.value >= 1L)
+    }
+
+    @Test
+    fun testHighFrequencyBurstPacketHandling() {
+        val initialReceived = networkManager.packetsReceivedCount.value
+        val initialMalformed = networkManager.malformedPacketsCount.value
+
+        // Simulate a rapid burst of 50 mouse packets, 10 pongs, and 5 corrupt packets
+        for (i in 1..50) {
+            networkManager.processIncomingPacket("""{"type":"mouse","dx":$i,"dy":$i,"btn":0,"wheel":0}""", "192.168.1.50")
+        }
+        for (i in 1..10) {
+            networkManager.processIncomingPacket("""{"type":"pong","name":"PC"}""", "192.168.1.50")
+        }
+        for (i in 1..5) {
+            networkManager.processIncomingPacket("corrupt_packet_data_$i", "192.168.1.50")
+        }
+
+        assertEquals(initialReceived + 60, networkManager.packetsReceivedCount.value)
+        assertEquals(initialMalformed + 5, networkManager.malformedPacketsCount.value)
+    }
 }

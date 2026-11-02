@@ -184,11 +184,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when (state) {
                     is com.example.service.WifiConnectionTestState.Success -> {
                         if (state.ip.isNotBlank()) {
-                            networkManager.pcIpAddress = state.ip
-                            preferencesManager.setSavedPcIp(state.ip)
-                            preferencesManager.setSavedConnectionMode(ConnectionMode.LOCAL_WIFI.name)
-                            bluetoothManager.setWifiMode(state.ip, state.serverName)
-                            networkManager.startHeartbeat()
+                            val ipChanged = networkManager.pcIpAddress != state.ip
+                            if (ipChanged) {
+                                networkManager.pcIpAddress = state.ip
+                            }
+                            val savedIp = preferencesManager.getSavedPcIp()
+                            if (savedIp != state.ip) {
+                                preferencesManager.setSavedPcIp(state.ip)
+                            }
+                            if (preferencesManager.getSavedConnectionMode() != ConnectionMode.LOCAL_WIFI.name) {
+                                preferencesManager.setSavedConnectionMode(ConnectionMode.LOCAL_WIFI.name)
+                            }
+                            if (ipChanged || !stats.value.connectedDeviceName.contains(state.ip)) {
+                                bluetoothManager.setWifiMode(state.ip, state.serverName)
+                            }
+                            if (!networkManager.isHeartbeatActive()) {
+                                networkManager.startHeartbeat()
+                            }
                         }
                     }
                     else -> {}
@@ -199,7 +211,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             networkManager.targetPcIp.collect { newIp ->
                 if (newIp.isNotBlank() && stats.value.connectionMode == ConnectionMode.LOCAL_WIFI) {
-                    preferencesManager.setSavedPcIp(newIp)
+                    val savedIp = preferencesManager.getSavedPcIp()
+                    if (savedIp != newIp) {
+                        preferencesManager.setSavedPcIp(newIp)
+                    }
                     bluetoothManager.updateWifiOnline(networkManager.isPcOnline.value, newIp)
                 }
             }
@@ -246,10 +261,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             ConnectionMode.LOCAL_WIFI -> {
                 networkManager.sendMousePacket(dx, dy, buttons, wheel)
-                bluetoothManager.recordPacketSent("WIFI MOUSE (btn=$buttons, dx=$dx, dy=$dy, whl=$wheel)")
+                // Log non-zero clicks or scroll actions to prevent 120fps UI state thrashing during pure cursor movements
+                if (buttons.toInt() != 0 || wheel != 0) {
+                    bluetoothManager.recordPacketSent("WIFI MOUSE (btn=$buttons, dx=$dx, dy=$dy, whl=$wheel)")
+                }
             }
             ConnectionMode.SIMULATION -> {
-                bluetoothManager.recordPacketSent("SIM MOUSE (btn=$buttons, dx=$dx, dy=$dy)")
+                if (buttons.toInt() != 0 || wheel != 0) {
+                    bluetoothManager.recordPacketSent("SIM MOUSE (btn=$buttons, dx=$dx, dy=$dy)")
+                }
             }
         }
 
@@ -494,11 +514,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 bluetoothManager.setBluetoothMode()
             }
             ConnectionMode.LOCAL_WIFI -> {
-                if (param.isNotBlank()) {
-                    networkManager.pcIpAddress = param
-                    preferencesManager.setSavedPcIp(param)
+                val targetIp = param.trim().ifBlank { networkManager.pcIpAddress }
+                if (targetIp.isNotBlank()) {
+                    networkManager.pcIpAddress = targetIp
+                    preferencesManager.setSavedPcIp(targetIp)
                 }
-                bluetoothManager.setWifiMode(networkManager.pcIpAddress)
+                val currentTest = networkManager.testState.value
+                val serverName = if (currentTest is com.example.service.WifiConnectionTestState.Success && currentTest.ip == targetIp) {
+                    currentTest.serverName
+                } else {
+                    ""
+                }
+                bluetoothManager.setWifiMode(networkManager.pcIpAddress, serverName)
                 networkManager.startHeartbeat()
             }
             ConnectionMode.SIMULATION -> {

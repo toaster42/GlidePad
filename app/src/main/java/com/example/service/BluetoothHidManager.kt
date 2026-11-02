@@ -319,9 +319,14 @@ class BluetoothHidManager(private val context: Context) {
     fun updateWifiOnline(isOnline: Boolean, pcIp: String) {
         val current = _stats.value
         if (current.connectionMode == ConnectionMode.LOCAL_WIFI) {
+            val deviceLabel = if (current.connectedDeviceName.contains("(") && current.connectedDeviceName.contains(pcIp)) {
+                current.connectedDeviceName
+            } else {
+                "PC at $pcIp"
+            }
             _stats.value = current.copy(
                 connectionStatus = if (isOnline) ConnectionStatus.CONNECTED else ConnectionStatus.PAIRING,
-                connectedDeviceName = if (isOnline) "PC at $pcIp" else "PC Reconnecting..."
+                connectedDeviceName = if (isOnline) deviceLabel else "PC Reconnecting..."
             )
         }
     }

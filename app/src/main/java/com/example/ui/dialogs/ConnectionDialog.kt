@@ -111,10 +111,19 @@ fun ConnectionDialog(
         if (currState is WifiConnectionTestState.Success) {
             val detectedIp = currState.ip
             if (detectedIp.isNotBlank()) {
-                pcIpInput = detectedIp
-                viewModel.networkManager.pcIpAddress = detectedIp
-                viewModel.preferencesManager.setSavedPcIp(detectedIp)
-                viewModel.bluetoothManager.setWifiMode(detectedIp, currState.serverName)
+                if (pcIpInput != detectedIp) {
+                    pcIpInput = detectedIp
+                }
+                val ipChanged = viewModel.networkManager.pcIpAddress != detectedIp
+                if (ipChanged) {
+                    viewModel.networkManager.pcIpAddress = detectedIp
+                }
+                if (viewModel.preferencesManager.getSavedPcIp() != detectedIp) {
+                    viewModel.preferencesManager.setSavedPcIp(detectedIp)
+                }
+                if (ipChanged || !viewModel.stats.value.connectedDeviceName.contains(detectedIp)) {
+                    viewModel.bluetoothManager.setWifiMode(detectedIp, currState.serverName)
+                }
             }
         }
     }
@@ -161,7 +170,10 @@ fun ConnectionDialog(
                                     selectedTabIndex = index
                                     when (index) {
                                         0 -> viewModel.switchConnectionMode(ConnectionMode.BLUETOOTH_HID)
-                                        1 -> viewModel.switchConnectionMode(ConnectionMode.LOCAL_WIFI, pcIpInput)
+                                        1 -> {
+                                            val targetIp = pcIpInput.trim().ifBlank { viewModel.networkManager.pcIpAddress }
+                                            viewModel.switchConnectionMode(ConnectionMode.LOCAL_WIFI, targetIp)
+                                        }
                                         2 -> viewModel.switchConnectionMode(ConnectionMode.SIMULATION)
                                     }
                                 }
@@ -421,7 +433,8 @@ fun ConnectionDialog(
                         // Connect & Apply Button
                         Button(
                             onClick = {
-                                viewModel.switchConnectionMode(ConnectionMode.LOCAL_WIFI, pcIpInput)
+                                val targetIp = pcIpInput.trim().ifBlank { viewModel.networkManager.pcIpAddress }
+                                viewModel.switchConnectionMode(ConnectionMode.LOCAL_WIFI, targetIp)
                                 onDismiss()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
@@ -448,21 +461,44 @@ fun ConnectionDialog(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Copy Receiver Script Button
+                        // Copy Standard Receiver Script Button
                         Button(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 val clip = ClipData.newPlainText("GlidePad Receiver", NetworkStreamManager.PYTHON_RECEIVER_SCRIPT)
                                 clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Copied Python receiver script to clipboard!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Copied ${NetworkStreamManager.RECEIVER_SCRIPT_FILENAME} (v${NetworkStreamManager.RECEIVER_SCRIPT_VERSION}) to clipboard!", Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark700),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("copy_receiver_script_button")
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copy Python Receiver Script", fontSize = 11.sp, color = NeonCyan)
+                            Text("Copy Standard Receiver (v${NetworkStreamManager.RECEIVER_SCRIPT_VERSION})", fontSize = 11.sp, color = NeonCyan)
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Copy Benchmark Receiver Script Button
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("GlidePad Benchmark Receiver", NetworkStreamManager.PYTHON_BENCHMARK_RECEIVER_SCRIPT)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Copied ${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME} (v${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION}) to clipboard!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark700),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("copy_benchmark_script_wifi_tab_button")
+                        ) {
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = ElectricBlue, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Benchmark Script (v${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION})", fontSize = 11.sp, color = ElectricBlue)
                         }
                     }
 
@@ -505,7 +541,12 @@ fun ConnectionDialog(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "1. Install requirements on PC:\n   pip install pynput\n\n2. Run the script on PC:\n   python glidepad_receiver.py\n\n3. Look at your PC terminal:\n   The script prints 'ENTER THIS IP IN GLIDEPAD APP: X.X.X.X'. Enter that exact IP in the Wi-Fi tab.\n\n4. Tap 'Test Ping' to verify instant round-trip response.\n\n5. Windows Firewall:\n   If Windows Defender Firewall shows a popup, click 'Allow Access' for Python on Private Networks.",
+                                text = "1. Install requirements on PC:\n   pip install pynput\n\n" +
+                                       "2. Standard Touchpad Receiver:\n   python ${NetworkStreamManager.RECEIVER_SCRIPT_FILENAME}\n   (Version ${NetworkStreamManager.RECEIVER_SCRIPT_VERSION})\n\n" +
+                                       "3. Network Benchmark Receiver:\n   python ${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME}\n   (Version ${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION})\n\n" +
+                                       "4. Look at your PC terminal:\n   The script prints 'ENTER THIS IP IN GLIDEPAD APP: X.X.X.X'. Enter that exact IP in the Wi-Fi tab.\n\n" +
+                                       "5. Tap 'Test Ping' to verify instant round-trip response.\n\n" +
+                                       "6. Windows Firewall:\n   If Windows Defender Firewall shows a popup, click 'Allow Access' for Python on Private Networks.",
                                 fontSize = 11.sp,
                                 color = TextPrimary,
                                 lineHeight = 17.sp

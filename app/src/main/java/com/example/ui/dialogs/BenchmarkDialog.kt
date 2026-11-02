@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.MainViewModel
 import com.example.engine.BenchmarkState
+import com.example.service.NetworkStreamManager
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentEmerald
 import com.example.ui.theme.ElectricBlue
@@ -109,7 +110,7 @@ fun BenchmarkDialog(
                 when (val currState = state) {
                     is BenchmarkState.Idle -> {
                         Text(
-                            text = "This benchmark evaluates Wi-Fi UDP transmission health against 'glidepad_benchmark_receiver.py' on your PC:\n\n" +
+                            text = "This benchmark evaluates Wi-Fi UDP transmission health against '${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME}' (v${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION}) on your PC:\n\n" +
                                     "• 40-packet Latency & RFC 3550 Jitter test\n" +
                                     "• 120Hz high-frequency motion packet burst\n" +
                                     "• Packet loss and out-of-order analysis\n" +
@@ -118,7 +119,7 @@ fun BenchmarkDialog(
                             color = TextSecondary,
                             lineHeight = 17.sp
                         )
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -127,11 +128,38 @@ fun BenchmarkDialog(
                                 .border(1.dp, SurfaceDark700, RoundedCornerShape(8.dp))
                                 .padding(10.dp)
                         ) {
-                            Text(
-                                text = "Host: $pcIp:8089 (Ensure benchmark receiver is running)",
-                                fontSize = 11.sp,
-                                color = ElectricBlue
-                            )
+                            Column {
+                                Text(
+                                    text = "Host: $pcIp:8089",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ElectricBlue
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Command: python ${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME}",
+                                    fontSize = 10.sp,
+                                    color = TextMuted
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("GlidePad Benchmark Receiver", NetworkStreamManager.PYTHON_BENCHMARK_RECEIVER_SCRIPT)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Copied ${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME} (v${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION}) to clipboard!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark700),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("copy_benchmark_script_button")
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Benchmark Script (v${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION})", fontSize = 11.sp, color = NeonCyan)
                         }
                     }
 
@@ -259,6 +287,24 @@ fun BenchmarkDialog(
                             color = AccentAmber,
                             lineHeight = 16.sp
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("GlidePad Benchmark Receiver", NetworkStreamManager.PYTHON_BENCHMARK_RECEIVER_SCRIPT)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Copied ${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME} (v${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_VERSION}) to clipboard!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark700),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("copy_benchmark_script_error_button")
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Benchmark Script (${NetworkStreamManager.BENCHMARK_RECEIVER_SCRIPT_FILENAME})", fontSize = 11.sp, color = NeonCyan)
+                        }
                     }
                 }
             }

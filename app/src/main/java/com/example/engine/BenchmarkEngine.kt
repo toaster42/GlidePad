@@ -143,7 +143,7 @@ class BenchmarkEngine(
 
                 if (latencies.isEmpty()) {
                     _state.value = BenchmarkState.Error(
-                        "No replies from $targetIp:$targetPort. Ensure glidepad_benchmark_receiver.py is running on your PC."
+                        "No replies from $targetIp:$targetPort. Ensure glidepad_benchmark_receiver_v1_1.py is running on your PC. You can copy the script from the benchmark screen."
                     )
                     return@launch
                 }
