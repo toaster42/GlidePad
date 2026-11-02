@@ -22,20 +22,21 @@ Ensure you have Node.js (v18+ recommended) and `npm` or `yarn` installed on your
 ```bash
 node -v
 npm -v
-
+```
 Installation
  * Clone the repository:
    git clone [https://github.com/toaster42/GlidePad.git](https://github.com/toaster42/GlidePad.git)
 cd GlidePad
 
  * Install dependencies:
-   npm install
+   `npm install`
 
  * Start the development server:
-   npm run dev
+   `npm run dev`
 
 Usage
 Import and initialize GlidePad within your project entry point:
+```js
 import GlidePad from './src/GlidePad';
 
 const pad = new GlidePad({
@@ -48,6 +49,7 @@ const pad = new GlidePad({
 });
 
 pad.init();
+```
 
 Configuration Options
 | Option | Type | Default | Description |
@@ -57,16 +59,16 @@ Configuration Options
 | enableGestures | boolean | true | Toggles multi-finger swipe and pinch processing. |
 | invertScroll | boolean | false | Flips natural scrolling direction. |
 Development & Scripts
- * npm run dev – Starts the local development server with hot reloading.
- * npm run build – Compiles production-ready bundle assets to the dist/ folder.
- * npm run test – Runs the automated unit test suite.
- * npm run lint – Executes ESLint to check for code style and syntax errors.
+ * `npm run dev` – Starts the local development server with hot reloading.
+ * `npm run build` – Compiles production-ready bundle assets to the dist/ folder.
+ * `npm run test` – Runs the automated unit test suite.
+ * `npm run lint` – Executes ESLint to check for code style and syntax errors.
 Contributing
 Contributions are welcome! Please follow these steps to contribute:
  * Fork the repository.
- * Create your feature branch (git checkout -b feature/amazing-feature).
- * Commit your changes (git commit -m 'Add amazing feature').
- * Push to the branch (git push origin feature/amazing-feature).
+ * Create your feature branch (`git checkout -b feature/amazing-feature`).
+ * Commit your changes (`git commit -m 'Add amazing feature'`).
+ * Push to the branch (`git push origin feature/amazing-feature`).
  * Open a Pull Request.
 License
 Distributed under the MIT License. See LICENSE for more information.
