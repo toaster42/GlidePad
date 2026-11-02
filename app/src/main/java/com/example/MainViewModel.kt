@@ -41,7 +41,8 @@ enum class AppScreen(val title: String) {
     KEYBOARD("Keyboard"),
     MACROS("Quick Macros"),
     VIRTUAL_SCREEN("Live Preview"),
-    SETTINGS("Settings & Tuning")
+    SETTINGS("Settings & Tuning"),
+    RECEIVER("Host Receiver")
 }
 
 data class VirtualScreenState(
@@ -61,6 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val hapticHelper = HapticFeedbackHelper(application)
     val bluetoothManager = BluetoothHidManager(application)
     val networkManager = NetworkStreamManager(application)
+    val inAppReceiverManager = com.example.service.InAppReceiverManager(application)
 
     // Firebase & Cloud Repositories
     val authManager = AuthManager(application)
@@ -774,5 +776,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun resetBenchmark() {
         benchmarkEngine.reset()
+    }
+
+    // ChromeOS In-App Receiver Controls
+    fun toggleInAppReceiver(port: Int = 8089): Boolean {
+        hapticHelper.click(settings.value.hapticLevel)
+        return if (inAppReceiverManager.isRunning.value) {
+            inAppReceiverManager.stop()
+            false
+        } else {
+            inAppReceiverManager.start(port)
+        }
+    }
+
+    fun resetReceiverStats() {
+        inAppReceiverManager.resetStats()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        inAppReceiverManager.stop()
     }
 }

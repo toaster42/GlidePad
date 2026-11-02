@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,12 +87,14 @@ fun TouchpadScreen(
         modifier = modifier
             .fillMaxSize()
             .background(SurfaceDark900)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Quick Controls Bar atop Trackpad
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .widthIn(max = 1000.dp)
                 .padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -194,6 +197,7 @@ fun TouchpadScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .widthIn(max = 1000.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(SurfaceDark800)
                 .border(1.5.dp, SurfaceDark700, RoundedCornerShape(20.dp))
@@ -386,6 +390,7 @@ fun TouchpadScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 1000.dp)
                     .height(68.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

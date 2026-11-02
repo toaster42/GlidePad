@@ -284,4 +284,78 @@ class LocalhostLoopbackIntegrationTest {
         assertTrue("Heartbeat ping must resume when gesture ceases",
             networkManager.shouldSendHeartbeatPing(idleTime))
     }
+
+    @Test
+    fun testInAppReceiverManagerLifecycleAndTelemetry() {
+        val receiver = com.example.service.InAppReceiverManager(context)
+        val started = receiver.start(0) // bind to ephemeral port
+        assertTrue("InAppReceiverManager must start cleanly on localhost", started)
+        assertTrue("Receiver isRunning state should be true", receiver.isRunning.value)
+
+        val port = receiver.serverPort.value
+        assertTrue("Server port should be greater than 0", port > 0)
+
+        // Send a realistic mouse gesture packet to the in-app receiver
+        val clientSocket = DatagramSocket()
+        try {
+            val mousePacket = JSONObject().apply {
+                put("type", "mouse")
+                put("dx", 120)
+                put("dy", -80)
+                put("btn", 1)
+                put("wheel", 3)
+                put("time", System.currentTimeMillis())
+            }
+            val data = mousePacket.toString().toByteArray()
+            clientSocket.send(DatagramPacket(data, data.size, InetAddress.getByName("127.0.0.1"), port))
+
+            // Allow background coroutine to receive
+            Thread.sleep(150)
+
+            assertTrue("Total packets received must be >= 1", receiver.totalPacketsReceived.value >= 1)
+            assertEquals("Last button state should match sent btn=1", 1, receiver.lastButtonState.value)
+            assertEquals("Last wheel delta should match sent wheel=3", 3, receiver.lastWheelDelta.value)
+            assertEquals("mouse", receiver.lastReceivedType.value)
+        } finally {
+            clientSocket.close()
+            receiver.stop()
+        }
+
+        assertFalse("Receiver isRunning must be false after stop()", receiver.isRunning.value)
+    }
+
+    @Test
+    fun testInAppReceiverRespondsToPingWithPong() {
+        val receiver = com.example.service.InAppReceiverManager(context)
+        val started = receiver.start(0)
+        assertTrue(started)
+        val receiverPort = receiver.serverPort.value
+
+        val clientSocket = DatagramSocket(0, InetAddress.getByName("127.0.0.1")).apply {
+            soTimeout = 2000
+        }
+        val clientPort = clientSocket.localPort
+
+        try {
+            val pingPacket = JSONObject().apply {
+                put("type", "ping")
+                put("client_port", clientPort)
+                put("time", 5000L)
+            }
+            val data = pingPacket.toString().toByteArray()
+            clientSocket.send(DatagramPacket(data, data.size, InetAddress.getByName("127.0.0.1"), receiverPort))
+
+            val buf = ByteArray(2048)
+            val responsePacket = DatagramPacket(buf, buf.size)
+            clientSocket.receive(responsePacket)
+
+            val respJson = JSONObject(String(responsePacket.data, 0, responsePacket.length))
+            assertEquals("pong", respJson.getString("type"))
+            assertEquals("GlidePad ChromeOS Host", respJson.getString("name"))
+            assertEquals(5000L, respJson.getLong("echo_time"))
+        } finally {
+            clientSocket.close()
+            receiver.stop()
+        }
+    }
 }

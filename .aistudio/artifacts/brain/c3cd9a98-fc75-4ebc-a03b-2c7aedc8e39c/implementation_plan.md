@@ -1,133 +1,146 @@
-# UDP Diagnostics, Benchmarking & Network Resilience Testing
+# ChromeOS & Googlebook OS Compatibility Architecture
 
-A comprehensive plan to expand GlidePad's network benchmarking framework with deep UDP diagnostics (latency percentiles, RFC 3550 jitter, throughput, packet loss distribution), build a robust unit testing suite for network resilience and UDP socket timeout retry flows, and prepare the release bump to version 5.0.
+An architectural plan to adapt GlidePad for ChromeOS, Google Chromebooks, and large-screen multi-window desktop environments. This enables GlidePad to function seamlessly both as a high-precision remote controller and as a native in-app receiver on Chromebooks, featuring desktop window resizing, adaptive side NavigationRail navigation, optional touchscreen manifests, and physical input handling.
 
 ---
 
-### User Review & Critical Decisions
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following architectural and test decisions have been aligned based on user clarification:
->
-> * **Primary Diagnostic Scope**: Deep UDP diagnostic information including sub-millisecond round-trip time (RTT), RFC 3550 inter-packet jitter, packet throughput (Hz and KB/s), packet loss percentage, out-of-order sequence detection, and Wi-Fi interface telemetry (link speed, frequency band, signal strength).
-> * **Test Priority**: Dedicated unit and integration tests focusing on **network resilience**, socket timeout handling, exponential backoff/retry policies, and reconnection state transitions.
-> * **Trigger Model**: On-demand execution initiated directly from the **Wi-Fi Connection Dialog** on the mobile device, communicating with `glidepad_benchmark_receiver.py` on the PC.
-> * **Release Management**: Increment `versionCode` from 4 to 5 and update `versionName` to `"5.0"` in `app/build.gradle.kts`.
+> The following decisions were confirmed during the interactive clarification interview:
+
+- **Confirmed Decision 1 (Dual-Role Device Operation)**: GlidePad on ChromeOS will support dual operating modes:
+  1. *Controller Mode*: The Chromebook controls external PCs, TVs, or presentations via Wi-Fi/Bluetooth.
+  2. *In-App Receiver Mode*: The Chromebook acts as the host receiver, allowing phones or other devices to connect, stream trackpad coordinates, and control the Chromebook with live HUD telemetry.
+- **Confirmed Decision 2 (Adaptive Multi-Window Desktop Layout)**: The interface will adapt dynamically between compact mobile layouts and expanded Chromebook desktop windows using a vertical Material 3 `NavigationRail` alongside wide trackpad and split-pane control surfaces.
+- **Confirmed Decision 3 (Play Store Hardware Manifest Accessibility)**: Explicitly mark `android.hardware.touchscreen`, `android.hardware.faketouch`, and `android.hardware.bluetooth` as optional (`android:required="false"`) so the app is installable across all ChromeOS laptops, convertibles, and desktop Chromeboxes.
 
 ---
 
-### 1. Overview & Core Concept
+## 1. Overview & Core Concept
 
-* **What It Does**:
-  1. **Advanced UDP Diagnostics & Benchmark**: Enhances the on-device benchmarking engine and the standalone PC receiver (`glidepad_benchmark_receiver.py`) to provide real-time network telemetry: minimum, average, p50, p95, and maximum RTT latency, RFC 3550 jitter variance, packet loss rate, and transmission stability scoring.
-  2. **Network Resilience & Retry Architecture**: Hardens the UDP communication layer with deterministic retry policies, sequence gap tracking, heartbeat failure detection, and graceful recovery when Wi-Fi packets drop.
-  3. **Resilience Unit Test Suite**: Implements isolated JVM unit tests using Robolectric and mock UDP sockets to verify socket timeout behavior, packet loss recovery, heartbeat timeouts, and state transitions without requiring a physical PC host.
-* **Target Audience**: Gamers, productivity enthusiasts, and wireless touchpad users who need ultra-low latency cursor response and transparent visibility into their local Wi-Fi performance.
-* **Key Value**: Delivers tangible validation that the network link is esports-ready (<6ms RTT) and guarantees the app remains stable during intermittent network drops.
+- **What It Does**: Transforms GlidePad into a native ChromeOS desktop citizen. The app runs smoothly in resizable freeform windows, supports physical mouse hover and hardware keyboard shortcuts, adapts to laptop aspect ratios with an ergonomic side `NavigationRail`, and includes a built-in *In-App Receiver* dashboard for receiving remote trackpad streams directly on ChromeOS.
+- **Target Audience / Persona**: Chromebook users, students, developers, and presenters who use ChromeOS laptops/convertibles and want to either remote-control desktop rigs or use their Chromebook as the display/receiver station.
+- **Key Value**: Unlocks universal ChromeOS compatibility and Play Store discoverability, eliminating touch-hardware restrictions and providing a desktop-native input experience.
 
 ---
 
-### 2. User Experience & Visual Design
+## 2. User Experience & Visual Design
 
-#### Key User Flows
-1. **Initiating Benchmark & Diagnostics**:
-   * User opens the **Wi-Fi Connection Dialog** from the top app bar.
-   * Taps **"Run Network Latency Benchmark"**.
-   * A full diagnostic modal displays live progress across 3 phases:
-     * *Phase 1*: RTT ping-pong trials (40 pings at 40Hz) with live latency readout and jitter gauge.
-     * *Phase 2*: High-frequency streaming burst (360 packets at 120Hz) measuring throughput and packet drops.
-     * *Phase 3*: Statistical analysis card showing min/avg/p95 latency, packet loss %, jitter, and an esports performance grade (`A+` to `C`).
-2. **Reviewing Detailed UDP Diagnostics**:
-   * An expandable **"Diagnostic Details"** accordion reveals Wi-Fi frequency band (5GHz vs 2.4GHz), link speed (Mbps), signal strength (RSSI), socket buffer sizes, and packet loss distribution.
-   * User can tap **"Copy Report"** or **"Attach to Diagnostics"** to submit data to the cloud error reporting system if issues are found.
-3. **Network Hiccup & Recovery Feedback**:
-   * If packets timeout during touchpad use or benchmark, the app seamlessly transitions through an unblocked reconnect attempt without freezing the UI, displaying an unobtrusive connection badge.
+### Key User Flows
 
-#### Visual Styling & Hierarchy
-* **Palette**: Dark Cyber-Slate surface (`#12161F`) with electric cyan (`#00F0FF`) and neon green accents for high grades (`A+`), amber for warning (`B`), and coral red for high jitter/loss (`C`).
-* **Telemetry Displays**: Monospaced tabular numbers for latencies (`X.X ms`) and throughput (`XXX Hz`), preventing layout jitter during rapid updates.
-* **Progress Visualization**: Linear gradient progress bar with phase step chips indicating the active benchmarking stage.
+1. **Freeform Window Resizing & Desktop Maximization**:
+   - The user opens GlidePad on ChromeOS. The window starts with a comfortable desktop aspect ratio (e.g., 900x650dp) and can be freely resized, snapped to splitscreen, or maximized.
+   - When window width is `>= 600dp` (Expanded/Medium window class), the bottom `NavigationBar` transitions into a sleek, vertical Material 3 `NavigationRail` on the left edge.
+   - In Expanded mode, settings and preview screens utilize two-pane layouts to prevent awkward horizontal whitespace stretching.
 
----
+2. **In-App Receiver Mode (Chromebook as Target Host)**:
+   - A dedicated "Host Receiver" tab or toggle in the Connection header allows the Chromebook to listen for incoming UDP packets on port 8089.
+   - Displays the Chromebook's local IP, active connection status, real-time packet rate (Hz), latency graph, and a virtual canvas with visual pointer coordinates.
 
-### 3. Key Product Decisions & Trade-Offs
+3. **Physical Mouse & Keyboard Integration**:
+   - On ChromeOS with a physical trackpad or mouse attached, the trackpad canvas responds to mouse cursor hover and scroll wheel deltas without blocking native window management.
+   - Hardware keyboard shortcuts (e.g., `Esc` to disconnect, `1-4` for quick tab switching, `Space` for presentation advance) are supported.
 
-* **Decision 1: UDP Datagram Ping-Pong vs. ICMP Echo (Standard Ping)**
-  * *Chosen Approach*: Use application-layer UDP datagrams matching the actual cursor protocol port (`8089`).
-  * *Why*: ICMP ping requires root privileges on Android and does not reflect actual UDP socket scheduling, firewall rules, or receiver script responsiveness. UDP testing measures real-world touchpad performance.
-* **Decision 2: RFC 3550 Moving Average Jitter Calculation**
-  * *Chosen Approach*: Implement standard VoIP/RTP RFC 3550 inter-arrival jitter algorithm `J = J + (|D| - J) / 16`.
-  * *Why*: Provides an industry-standard, smooth metric that captures packet burstiness and Wi-Fi airtime contention without being skewed by a single isolated outlier.
-* **Decision 3: Mock Socket Testing for Network Resilience**
-  * *Chosen Approach*: Decouple socket I/O from packet processing and heartbeat state management, allowing unit tests to simulate timeouts, dropped packets, and out-of-order packets deterministically on the JVM.
-  * *Why*: Eliminates flaky tests that rely on external physical network adapters while enabling 100% reproducible test runs in CI/Gradle.
+### Visual Identity & Theme
+
+- **Aesthetic Direction**: High-tech Cyberpunk Dark UI consistent with GlidePad's neon aesthetic (`#0A0E17` obsidian background with `#00F0FF` electric cyan and `#7000FF` purple accents).
+- **NavigationRail**:
+  - Anchored to the left edge with translucent glassmorphic backdrop (`SurfaceDark900` with 1dp border).
+  - Displays branded header badge ("GLIDEPAD OS"), active neon pill indicators, and a persistent connection health pill.
+- **Trackpad Canvas on Large Screens**:
+  - Centers with an ergonomic bounding box (e.g., max width 960dp) flanked by secondary macro panels or quick actions, preventing unergonomic arm strain on ultra-wide screens.
 
 ---
 
-### 4. Technical Architecture & Data Strategy
+## 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: Android Manifest Hardware Feature Declarations**
+  - *Chosen Approach*: Add `<uses-feature android:name="android.hardware.touchscreen" android:required="false" />`, `<uses-feature android:name="android.hardware.faketouch" android:required="false" />`, and set `android:resizeableActivity="true"`.
+  - *Why*: Standard Android manifest defaults implicitly require a touchscreen when touch gestures are used. Without this, Google Play filters out non-touch Chromebooks and Chromeboxes.
+  - *Alternatives Considered*: Leaving manifest defaults untouched (would block up to 50% of ChromeOS device installs on Play Store).
+
+- **Decision 2: Adaptive Navigation Component Architecture**
+  - *Chosen Approach*: Responsive composable wrapper checking window width (`BoxWithConstraints` or `calculateWindowSizeClass`) that chooses between `NavigationBar` (compact width `< 600dp`) and `NavigationRail` (expanded width `>= 600dp`).
+  - *Why*: Bottom navigation bars on 14"–16" Chromebook displays stretch icons hundreds of pixels apart, causing severe ergonomic degradation. Navigation rails are the Google Material 3 canonical pattern for ChromeOS and desktop layouts.
+
+- **Decision 3: Native In-App Kotlin Receiver vs. External Python Runner**
+  - *Chosen Approach*: Implement an in-app Kotlin UDP receiver daemon inside `NetworkStreamManager` for ChromeOS.
+  - *Why*: While Windows/macOS/Linux users run `glidepad_receiver_v2_3.py`, ChromeOS users running the Android APK cannot easily execute background Python terminal daemons without developer mode / Crostini Linux container. A built-in Kotlin receiver allows instant zero-config pairing between phones and Chromebooks.
+
+---
+
+## 4. Technical Architecture & Data Strategy
+
+### System Component Diagram
 
 ```
- ┌─────────────────────────────────────────────────────────────┐
- │                     ConnectionDialog UI                     │
- │  ┌───────────────────────────────────────────────────────┐  │
- │  │      BenchmarkDialog (Live RTT, Jitter, Grade)        │  │
- │  └──────────────────────────┬────────────────────────────┘  │
- └─────────────────────────────┼───────────────────────────────┘
-                               │
- ┌─────────────────────────────▼───────────────────────────────┐
- │                       MainViewModel                         │
- │  ┌──────────────────────────┴────────────────────────────┐  │
- │  │        BenchmarkState (Idle, Running, Completed)      │  │
- │  └──────────────────────────┬────────────────────────────┘  │
- └─────────────────────────────┼───────────────────────────────┘
-                               │
-            ┌──────────────────┴──────────────────┐
-            ▼                                     ▼
- ┌─────────────────────────────┐       ┌─────────────────────────────┐
- │       BenchmarkEngine       │       │    NetworkStreamManager     │
- │  - RTT ping-pong trials     │       │  - UDP packet transmission  │
- │  - 120Hz throughput burst   │       │  - Heartbeat & keep-alive   │
- │  - RFC 3550 jitter math     │       │  - Timeout & retry policies │
- │  - Diagnostic synthesis     │       │  - Wi-Fi link telemetry     │
- └──────────────┬──────────────┘       └──────────────┬──────────────┘
-                │                                     │
-                └──────────────────┬──────────────────┘
-                                   │ UDP (Port 8089)
-                                   ▼
- ┌─────────────────────────────────────────────────────────────┐
- │         PC Host: glidepad_benchmark_receiver.py             │
- │  - Echoes benchmark pings with server timestamps            │
- │  - Records 120Hz packet stream and measures arrival gaps    │
- │  - Generates JSON summary and packet loss report            │
- └─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        GlidePad on ChromeOS                            │
+│                                                                        │
+│  ┌───────────────────────┐  ┌───────────────────────────────────────┐  │
+│  │ Window Size Sensing   │  │ Hardware Manifest                     │  │
+│  │ (Compact vs Expanded) │  │ • touchscreen: optional               │  │
+│  └───────────┬───────────┘  │ • resizeableActivity="true"           │  │
+│              │              └───────────────────────────────────────┘  │
+│              ▼                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Responsive Shell (MainActivity / Scaffold)                       │  │
+│  │                                                                  │  │
+│  │  [Width < 600dp]                 [Width >= 600dp]                │  │
+│  │  Bottom NavigationBar            Left NavigationRail             │  │
+│  │  Full-width Single Pane          Two-Pane Master-Detail          │  │
+│  └──────────────────────────────────┬───────────────────────────────┘  │
+│                                     │                                  │
+│              ┌──────────────────────┴───────────────────────┐          │
+│              ▼                                              ▼          │
+│  ┌─────────────────────────┐                ┌────────────────────────┐ │
+│  │ Controller Engine       │                │ In-App Receiver Engine │ │
+│  │ • Touchpad / Keyboard   │                │ • UDP Socket :8089     │ │
+│  │ • Physical Key Shortcuts│                │ • Packet Deserializer  │ │
+│  │ • Outgoing UDP Streams  │                │ • Live Telemetry Canvas│ │
+│  └─────────────────────────┘                └────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Planned Unit Test Suite Expansion
+### Manifest Updates Required
 
-1. **`NetworkResilienceTest.kt`**:
-   * **Test Case 1 (Socket Timeout & State Transition)**: Verifies that when a ping times out after `soTimeout`, the manager transitions `testState` to `WifiConnectionTestState.Error` without throwing an unhandled exception or leaking the socket.
-   * **Test Case 2 (Heartbeat Drop Detection)**: Verifies that when no pong is received for >6000ms, `isPcOnline` correctly flips from `true` to `false`.
-   * **Test Case 3 (Heartbeat Recovery)**: Verifies that subsequent incoming pongs restore `isPcOnline` to `true` and update `liveLatencyMs`.
-   * **Test Case 4 (Exponential Backoff on Reconnect)**: Validates that reconnect attempts throttle appropriately rather than flooding the network with rapid socket requests.
-   * **Test Case 5 (Corrupt / Partial Packet Resilience)**: Verifies that malformed or truncated JSON packets sent to `handleIncomingPacket()` are safely logged without crashing the receiver coroutine.
+```xml
+<!-- Hardware features declared non-mandatory for ChromeOS / desktop Play Store compatibility -->
+<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+<uses-feature android:name="android.hardware.faketouch" android:required="false" />
+<uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
-2. **`BenchmarkEngineTest.kt` (Extended)**:
-   * **Test Case 6 (Jitter Convergence)**: Validates that RFC 3550 jitter calculation converges accurately across simulated variable packet intervals (e.g. 5ms, 25ms, 10ms, 40ms).
-   * **Test Case 7 (Extreme Packet Loss Handling)**: Tests grading and recommendation outputs when packet loss is 20%, 50%, or 100%.
-   * **Test Case 8 (Zero Latency Edge Case)**: Tests sub-millisecond round-trip clamping (`coerceAtLeast(1)`) to ensure divide-by-zero errors never occur.
+<!-- Activity multi-window and freeform desktop configuration -->
+<activity
+    android:name=".MainActivity"
+    android:exported="true"
+    android:resizeableActivity="true"
+    android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+    android:windowSoftInputMode="adjustResize" ...>
+    <layout
+        android:defaultWidth="900dp"
+        android:defaultHeight="650dp"
+        android:minWidth="420dp"
+        android:minHeight="480dp" />
+</activity>
+```
 
-3. **Release Bump Execution**:
-   * Update `app/build.gradle.kts`:
-     * `versionCode = 5`
-     * `versionName = "5.0"`
-   * Update `MainViewModel.kt` diagnostics default `appVersion = "5.0"`.
+### Module Refactoring Plan
 
----
+1. **`AndroidManifest.xml`**:
+   - Add `<uses-feature>` declarations marking touchscreen, faketouch, and bluetooth as optional.
+   - Declare `android:resizeableActivity="true"`, desktop layout dimensions (`defaultWidth`, `defaultHeight`, `minWidth`, `minHeight`).
+   - Add `smallestScreenSize` to `configChanges` to handle smooth window resizing on ChromeOS.
 
-### 5. Implementation Roadmap (Upon Approval)
+2. **`MainActivity.kt` & Navigation UI**:
+   - Introduce responsive layout detection using available constraints (`BoxWithConstraints`).
+   - When `maxWidth >= 600.dp`, render a side `NavigationRail` with desktop-optimized layout; when `< 600.dp`, preserve the bottom `NavigationBar`.
+   - Add hardware keyboard shortcuts handler (`onKeyEvent`).
 
-1. **Version Code Bump**: Update `app/build.gradle.kts` (`versionCode = 5`, `versionName = "5.0"`) and sync version strings across the codebase.
-2. **Network Resilience Hardening**: Refactor `NetworkStreamManager` to support configurable timeouts, retry listeners, and resilient packet decoding.
-3. **Resilience Unit Tests**: Create `NetworkResilienceTest.kt` covering all timeout, retry, and packet drop edge cases using JUnit 4 and Kotlin coroutines test runners.
-4. **Benchmark Engine Enhancements**: Add percentile latency distribution (p50, p95, p99) and detailed UDP network interface telemetry to `BenchmarkEngine`.
-5. **Verification**: Run `gradle :app:testDebugUnitTest` and `compile_applet` to confirm 100% test pass rate and clean build.
+3. **`NetworkStreamManager.kt` & `InAppReceiverManager.kt`**:
+   - Implement the in-app UDP receiver server capable of listening on port 8089 on localhost / LAN interface.
+   - Provide real-time reception telemetry and packet statistics to the UI.
+
+4. **`ReceiverDashboardScreen.kt`**:
+   - Add a dedicated In-App Receiver screen displaying local IP, listening port, connected remote client status, packet loss rate, and live coordinates HUD.
