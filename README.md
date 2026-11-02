@@ -1,4 +1,4 @@
-# GlidePad
+# GlidePad 🎛️✨
 
 A clean, responsive trackpad and gesture input solution designed for smooth, intuitive navigation and touch interactions across desktop and web environments.
 
