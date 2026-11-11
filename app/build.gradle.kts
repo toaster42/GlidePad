@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import org.jetbrains.dokka.gradle.DokkaExtension
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
 
 plugins {
@@ -145,10 +146,10 @@ dependencies {
   "ksp"(libs.moshi.kotlin.codegen)
 }
 
-dokka {
+configure<DokkaExtension> {
   moduleName.set("GlidePad")
   dokkaSourceSets.configureEach {
-    documentedVisibilities(VisibilityModifier.Public)
+    documentedVisibilities.set(setOf(VisibilityModifier.Public))
   }
 }
 
