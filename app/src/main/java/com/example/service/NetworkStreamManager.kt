@@ -18,24 +18,58 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 
+/**
+ * Sealed hierarchy representing the state of a Wi-Fi connection or ping test.
+ */
 sealed class WifiConnectionTestState {
+    /** Initial or idle resting state when no test is actively running. */
     object Idle : WifiConnectionTestState()
+
+    /** Actively sending UDP discovery or ping packets and waiting for reply. */
     object Testing : WifiConnectionTestState()
+
+    /**
+     * Successful ping or announcement received from the target PC receiver.
+     *
+     * @property latencyMs Measured round-trip latency in milliseconds.
+     * @property serverName Hostname or human-readable label of the receiver.
+     * @property ip IPv4 address of the replying receiver.
+     */
     data class Success(val latencyMs: Long, val serverName: String, val ip: String) : WifiConnectionTestState()
+
+    /**
+     * Failure state when connection test or discovery times out or encounters network errors.
+     *
+     * @property message Descriptive failure explanation or diagnostic hint.
+     */
     data class Error(val message: String) : WifiConnectionTestState()
 }
 
+/**
+ * Ultra-low-latency UDP network streaming manager.
+ *
+ * Implements bidirectional UDP packet communication with the GlidePad Python receiver running on
+ * the target PC. Handles sub-millisecond mouse/pointer deltas, hotkey sequences, direct text entry,
+ * Wake-on-LAN magic packets, and dynamic background heartbeat/ping telemetry.
+ *
+ * @param context Application context used to query Wi-Fi subsystem details.
+ */
 class NetworkStreamManager(private val context: Context) {
 
     private val tag = "NetworkStreamManager"
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    /** Mutable state holding the active target PC IP address string. */
     val targetPcIp = MutableStateFlow("192.168.1.100")
+
+    /** Property accessor synchronizing target IP with [targetPcIp] StateFlow. */
     var pcIpAddress: String
         get() = targetPcIp.value
         set(value) {
             targetPcIp.value = value
         }
+
+    /** Target UDP destination port on the host receiver (default 8089). */
     var pcPort: Int = 8089
 
     private var sendSocket: DatagramSocket? = null
@@ -43,24 +77,47 @@ class NetworkStreamManager(private val context: Context) {
     private var receiveJob: Job? = null
     private var heartbeatJob: Job? = null
 
+    /** Flow indicating whether the target PC receiver is actively responding to heartbeats. */
     val isPcOnline = MutableStateFlow(false)
+
+    /** Live round-trip latency measurement in milliseconds. */
     val liveLatencyMs = MutableStateFlow(3L)
 
     private val _testState = MutableStateFlow<WifiConnectionTestState>(WifiConnectionTestState.Idle)
+
+    /** State flow tracking the active Wi-Fi connection test status. */
     val testState: StateFlow<WifiConnectionTestState> = _testState.asStateFlow()
 
     private val _logCallback = MutableStateFlow<String?>(null)
+
+    /** State flow emitting diagnostic and operational log messages. */
     val logCallback: StateFlow<String?> = _logCallback.asStateFlow()
 
+    /** UDP socket read timeout in milliseconds (default 3000ms). */
     var socketTimeoutMs: Int = 3000
+
+    /** Inactivity duration in ms before declaring a receiver offline (default 6000ms). */
     var offlineTimeoutThresholdMs: Long = 6000L
+
+    /** Interval in ms between heartbeat pings when trackpad is idle (default 3000ms). */
     var heartbeatIntervalMs: Long = 3000L
+
+    /** Maximum retry attempts for non-critical UDP packets (default 3). */
     var maxRetryAttempts: Int = 3
+
+    /** Exponential/linear backoff pause between packet retry attempts in ms. */
     var retryBackoffMs: Long = 50L
 
+    /** Metric tracking total unrecognized or corrupted incoming packets received. */
     val malformedPacketsCount = MutableStateFlow(0)
+
+    /** Metric tracking total network transmission or socket I/O errors encountered. */
     val networkErrorCount = MutableStateFlow(0)
+
+    /** Total outbound UDP packets transmitted. */
     val packetsSentCount = MutableStateFlow(0L)
+
+    /** Total inbound UDP packets received. */
     val packetsReceivedCount = MutableStateFlow(0L)
 
     private var pingStartTime: Long = 0
@@ -70,6 +127,9 @@ class NetworkStreamManager(private val context: Context) {
         initSockets()
     }
 
+    /**
+     * Initializes or recreates the underlying sending and receiving UDP datagram sockets.
+     */
     @Synchronized
     fun initSockets() {
         try {
@@ -117,6 +177,12 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Dispatches an incoming raw JSON string received over the UDP socket.
+     *
+     * @param rawJson Raw JSON string payload received from the network.
+     * @param senderIp Host IP address of the transmitting peer.
+     */
     fun handleIncomingPacket(rawJson: String, senderIp: String) {
         processIncomingPacket(rawJson, senderIp)
     }
@@ -124,6 +190,10 @@ class NetworkStreamManager(private val context: Context) {
     /**
      * Processes an incoming raw JSON packet safely.
      * Returns true if packet was parsed and recognized; false if malformed or unrecognized.
+     *
+     * @param rawJson Raw JSON string payload received from the network.
+     * @param senderIp Host IP address of the transmitting peer.
+     * @return True if the packet was successfully parsed and handled.
      */
     fun processIncomingPacket(rawJson: String, senderIp: String): Boolean {
         return try {
@@ -175,6 +245,11 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Verifies if the time elapsed since the last pong reply exceeds [offlineTimeoutThresholdMs].
+     *
+     * @param currentTime Current timestamp in milliseconds (defaults to system time).
+     */
     fun checkHeartbeatTimeout(currentTime: Long = System.currentTimeMillis()) {
         if (lastPongReceivedTime > 0 && (currentTime - lastPongReceivedTime) > offlineTimeoutThresholdMs) {
             if (isPcOnline.value) {
@@ -184,6 +259,13 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Test fixture helper that simulates receiving a valid pong packet from a PC receiver.
+     *
+     * @param senderIp Simulated sender IP address.
+     * @param latencyMs Simulated latency in milliseconds.
+     * @param serverName Simulated receiver name.
+     */
     fun simulatePongReceived(senderIp: String = pcIpAddress, latencyMs: Long = 4L, serverName: String = "Test PC") {
         val now = System.currentTimeMillis()
         lastPongReceivedTime = now
@@ -197,27 +279,60 @@ class NetworkStreamManager(private val context: Context) {
         )
     }
 
+    /**
+     * Test fixture method for setting the internal last pong timestamp.
+     *
+     * @param timeMs Timestamp in milliseconds.
+     */
     fun setLastPongTimeForTest(timeMs: Long) {
         lastPongReceivedTime = timeMs
     }
 
+    /**
+     * Test fixture method for setting the internal ping start timestamp.
+     *
+     * @param timeMs Timestamp in milliseconds.
+     */
     fun setPingStartTimeForTest(timeMs: Long) {
         pingStartTime = timeMs
     }
 
+    /** Timestamp in milliseconds when the last mouse/touchpad packet was dispatched. */
     @Volatile
     var lastMousePacketSentTime: Long = 0L
 
+    /**
+     * Checks if active pointer gestures have been dispatched within [thresholdMs].
+     *
+     * @param currentTime Current timestamp in milliseconds.
+     * @param thresholdMs Activity window threshold in milliseconds.
+     * @return True if user touch interaction occurred recently.
+     */
     fun isTrackpadActive(currentTime: Long = System.currentTimeMillis(), thresholdMs: Long = 1200L): Boolean {
         return (currentTime - lastMousePacketSentTime) < thresholdMs
     }
 
+    /**
+     * Determines whether sending a ping packet is advisable without degrading pointer stream throughput.
+     *
+     * @param currentTime Current timestamp in milliseconds.
+     * @param thresholdMs Inactivity threshold required before pinging.
+     * @return True if ping is safe to transmit.
+     */
     fun shouldSendHeartbeatPing(currentTime: Long = System.currentTimeMillis(), thresholdMs: Long = 1200L): Boolean {
         return !isTrackpadActive(currentTime, thresholdMs)
     }
 
+    /**
+     * Checks whether the background heartbeat coroutine job is currently active.
+     *
+     * @return True if heartbeat coroutine is running.
+     */
     fun isHeartbeatActive(): Boolean = heartbeatJob?.isActive == true
 
+    /**
+     * Starts the periodic background heartbeat coroutine.
+     */
     fun startHeartbeat() {
         if (heartbeatJob?.isActive == true) {
             return
@@ -252,11 +367,19 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Stops the periodic background heartbeat coroutine.
+     */
     fun stopHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = null
     }
 
+    /**
+     * Tests the UDP connection to the specified target host.
+     *
+     * @param targetIp Target host IP address to ping (defaults to [pcIpAddress]).
+     */
     fun testConnection(targetIp: String = pcIpAddress) {
         _testState.value = WifiConnectionTestState.Testing
         pingStartTime = System.currentTimeMillis()
@@ -285,6 +408,9 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Broadcasts a discovery UDP packet across the local subnet to automatically locate the PC receiver.
+     */
     fun discoverPcOnNetwork() {
         _testState.value = WifiConnectionTestState.Testing
         scope.launch {
@@ -312,6 +438,14 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Dispatches relative mouse motion and button events as UDP packets to the PC receiver.
+     *
+     * @param dx Relative delta along horizontal axis.
+     * @param dy Relative delta along vertical axis.
+     * @param buttons Bitmask representing active mouse buttons (1=left, 2=right, 4=middle).
+     * @param wheel Scroll wheel movement count.
+     */
     fun sendMousePacket(dx: Int, dy: Int, buttons: Byte, wheel: Int = 0) {
         lastMousePacketSentTime = System.currentTimeMillis()
         scope.launch {
@@ -331,6 +465,12 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Dispatches a keyboard hotkey or shortcut event to the receiver.
+     *
+     * @param keys List of key identifiers (e.g. `ctrl`, `shift`, `esc`).
+     * @param action Keyboard action type (`press`, `down`, `up`).
+     */
     fun sendKeyPacket(keys: List<String>, action: String) {
         scope.launch {
             try {
@@ -346,6 +486,11 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Sends direct string text to the PC receiver for simulated keyboard typing.
+     *
+     * @param text The string to type on the target system.
+     */
     fun sendTextDirect(text: String) {
         scope.launch {
             try {
@@ -360,6 +505,11 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Instructs the PC receiver to open a browser window to the designated URL.
+     *
+     * @param url Web URL to open on the PC host.
+     */
     fun sendOpenUrl(url: String) {
         scope.launch {
             try {
@@ -378,6 +528,11 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Transmits a predefined system command to the PC receiver (e.g. lock, sleep, volume).
+     *
+     * @param command Command keyword string recognised by the receiver.
+     */
     fun sendSystemCommand(command: String) {
         scope.launch {
             try {
@@ -393,6 +548,11 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Broadcasts a Wake-on-LAN magic packet to wake up a sleeping PC across the local network.
+     *
+     * @param macAddress Target PC network adapter MAC address (e.g. "AA:BB:CC:DD:EE:FF").
+     */
     fun sendWakeOnLan(macAddress: String) {
         scope.launch {
             try {
@@ -436,6 +596,13 @@ class NetworkStreamManager(private val context: Context) {
         return addr
     }
 
+    /**
+     * Transmits raw byte buffer data to the target UDP host and port with automatic retry attempts.
+     *
+     * @param data Binary payload to transmit.
+     * @param targetIp Target destination IPv4 string.
+     * @param retries Number of transmission retry attempts.
+     */
     fun sendRaw(data: ByteArray, targetIp: String = pcIpAddress, retries: Int = maxRetryAttempts) {
         var attempts = 0
         var sent = false
@@ -468,6 +635,11 @@ class NetworkStreamManager(private val context: Context) {
         }
     }
 
+    /**
+     * Queries the Wi-Fi subsystem for the current local IPv4 address assigned to this Android device.
+     *
+     * @return Formatted IPv4 address string, or human-readable fallback message if disconnected.
+     */
     fun getDeviceLocalIp(): String {
         return try {
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
@@ -490,12 +662,19 @@ class NetworkStreamManager(private val context: Context) {
     }
 
     companion object {
+        /** Version identifier of the bundled standard Python PC receiver script. */
         const val RECEIVER_SCRIPT_VERSION = "2.3"
+
+        /** Default filename for saving the standard Python PC receiver script. */
         const val RECEIVER_SCRIPT_FILENAME = "glidepad_receiver_v2_3.py"
 
+        /** Version identifier of the bundled benchmark companion receiver script. */
         const val BENCHMARK_RECEIVER_SCRIPT_VERSION = "1.1"
+
+        /** Default filename for saving the benchmark companion receiver script. */
         const val BENCHMARK_RECEIVER_SCRIPT_FILENAME = "glidepad_benchmark_receiver_v1_1.py"
 
+        /** Bundled Python receiver script source code (v2.3) capable of being exported or served. */
         val PYTHON_RECEIVER_SCRIPT = """
 # =====================================================================
 #  GlidePad Ultra-Low-Latency PC Receiver (v2.3 - Wi-Fi Power Edition)

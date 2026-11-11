@@ -16,6 +16,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Authentication manager for Google Sign-In and Firebase Authentication state.
+ *
+ * Implements Android Jetpack [CredentialManager] using [GetSignInWithGoogleOption] to request
+ * identity tokens from Google Play Services, exchanging them for Firebase Auth credentials.
+ * Manages reactive [currentUser] authentication state flows across the application.
+ *
+ * @param context Application context used for initialization.
+ */
 class AuthManager(private val context: Context) {
 
     private val auth: FirebaseAuth by lazy {

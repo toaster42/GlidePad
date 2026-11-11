@@ -46,6 +46,14 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Top bar header displaying active connection mode, telemetry badge (RTT, packets), and settings shortcuts.
+ *
+ * @param stats Live [DiagnosticStats] tracking mode, connection status, device name, and latency.
+ * @param onOpenConnectionDialog Callback invoked when user taps connection status pill.
+ * @param onOpenSettings Callback invoked when user taps settings gear icon.
+ * @param modifier Composable layout modifier.
+ */
 @Composable
 fun ConnectionHeader(
     stats: DiagnosticStats,

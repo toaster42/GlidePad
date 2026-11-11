@@ -17,13 +17,22 @@ import com.example.model.DiagnosticStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.Executors
-
+/**
+ * Bluetooth Human Interface Device (HID) manager.
+ *
+ * Emulates a standard composite USB/Bluetooth HID peripheral (mouse + keyboard) using Android's
+ * [BluetoothHidDevice] profile (Android 9.0+, API 28+). Translates touch events directly into standard
+ * 4-byte mouse reports and 8-byte keyboard reports without requiring any companion software on the PC.
+ *
+ * @param context Application context used to resolve [BluetoothManager].
+ */
 class BluetoothHidManager(private val context: Context) {
 
     private val tag = "BluetoothHidManager"
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+
+    /** System [BluetoothAdapter] reference or null if unsupported. */
     val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
 
     private var hidDevice: BluetoothHidDevice? = null
@@ -31,15 +40,20 @@ class BluetoothHidManager(private val context: Context) {
     private val executor = Executors.newSingleThreadExecutor()
 
     private val _stats = MutableStateFlow(DiagnosticStats())
+
+    /** Diagnostic telemetry snapshot flow tracking packets sent, RTT, and connection status. */
     val stats: StateFlow<DiagnosticStats> = _stats.asStateFlow()
 
     private var isAppRegistered = false
 
     companion object {
+        /** Report ID for HID Mouse inputs defined in [HID_DESCRIPTOR]. */
         const val REPORT_ID_MOUSE: Byte = 1
+
+        /** Report ID for HID Keyboard inputs defined in [HID_DESCRIPTOR]. */
         const val REPORT_ID_KEYBOARD: Byte = 2
 
-        // Standard USB HID Composite Descriptor for Mouse + Keyboard
+        /** Standard USB HID Composite Descriptor binary definition for Mouse + Keyboard. */
         val HID_DESCRIPTOR = byteArrayOf(
             // Mouse (Report ID 1)
             0x05.toByte(), 0x01.toByte(), // Usage Page (Generic Desktop)
@@ -160,6 +174,11 @@ class BluetoothHidManager(private val context: Context) {
         }
     }
 
+    /**
+     * Initializes the Bluetooth HID Device proxy service.
+     *
+     * Requests profile proxy binding from the local [BluetoothAdapter] on Android 9.0+ devices.
+     */
     fun initialize() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && bluetoothAdapter != null) {
             try {
@@ -204,6 +223,11 @@ class BluetoothHidManager(private val context: Context) {
         }
     }
 
+    /**
+     * Initiates connection to a specific bonded target [BluetoothDevice].
+     *
+     * @param device The target PC/Mac/host Bluetooth device to connect to.
+     */
     @SuppressLint("MissingPermission")
     fun connectToDevice(device: BluetoothDevice) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -216,6 +240,9 @@ class BluetoothHidManager(private val context: Context) {
         }
     }
 
+    /**
+     * Disconnects from the currently connected Bluetooth HID host.
+     */
     @SuppressLint("MissingPermission")
     fun disconnect() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -228,6 +255,14 @@ class BluetoothHidManager(private val context: Context) {
         )
     }
 
+    /**
+     * Sends a 4-byte standard mouse report to the connected Bluetooth host.
+     *
+     * @param buttons Bitmask representing mouse button state (bit 0 = left, bit 1 = right, bit 2 = middle).
+     * @param dx Relative horizontal displacement in counts (clamped to -127..127).
+     * @param dy Relative vertical displacement in counts (clamped to -127..127).
+     * @param wheel Relative scroll wheel movement (clamped to -127..127).
+     */
     @SuppressLint("MissingPermission")
     fun sendMouseReport(buttons: Byte, dx: Int, dy: Int, wheel: Int = 0) {
         val clampedDx = dx.coerceIn(-127, 127).toByte()
@@ -243,6 +278,12 @@ class BluetoothHidManager(private val context: Context) {
         recordPacketSent("MOUSE (btn=$buttons, dx=$clampedDx, dy=$clampedDy, whl=$clampedWheel)")
     }
 
+    /**
+     * Sends an 8-byte standard keyboard report followed immediately by a key-up release report.
+     *
+     * @param modifiers Bitmask of modifier keys (Ctrl, Shift, Alt, GUI).
+     * @param keycode USB HID Usage Table key code (e.g. 0x04 for 'A', 0x28 for Enter).
+     */
     @SuppressLint("MissingPermission")
     fun sendKeyboardReport(modifiers: Byte, keycode: Byte) {
         val report = byteArrayOf(modifiers, 0x00.toByte(), keycode, 0, 0, 0, 0, 0)
@@ -257,6 +298,11 @@ class BluetoothHidManager(private val context: Context) {
         recordPacketSent("KEY (mod=0x${modifiers.toString(16)}, key=0x${keycode.toString(16)})")
     }
 
+    /**
+     * Records telemetry for a transmitted packet, updating packet counter and recent log history.
+     *
+     * @param details Text description of packet contents for debugging display.
+     */
     fun recordPacketSent(details: String) {
         val current = _stats.value
         val newCount = current.packetsSent + 1
@@ -268,12 +314,22 @@ class BluetoothHidManager(private val context: Context) {
         )
     }
 
+    /**
+     * Appends an informational message to the rolling diagnostic logs buffer.
+     *
+     * @param msg The message string to append.
+     */
     fun addLog(msg: String) {
         val current = _stats.value
         val newLogs = (listOf("[INFO] $msg") + current.recentLogs).take(30)
         _stats.value = current.copy(recentLogs = newLogs)
     }
 
+    /**
+     * Retrieves the list of currently bonded (paired) Bluetooth devices.
+     *
+     * @return List of bonded [BluetoothDevice] instances, or empty list on error/no permission.
+     */
     @SuppressLint("MissingPermission")
     fun getBondedDevices(): List<BluetoothDevice> {
         return try {
@@ -283,6 +339,9 @@ class BluetoothHidManager(private val context: Context) {
         }
     }
 
+    /**
+     * Switches the active connection mode to interactive Virtual PC Desktop simulation.
+     */
     fun setSimulationMode() {
         _stats.value = _stats.value.copy(
             connectionMode = ConnectionMode.SIMULATION,
@@ -292,6 +351,12 @@ class BluetoothHidManager(private val context: Context) {
         addLog("Activated Interactive Virtual Desktop Mode")
     }
 
+    /**
+     * Updates telemetry to reflect a connection to a Wi-Fi desktop receiver.
+     *
+     * @param pcIp Host IP address of the target PC receiver.
+     * @param serverName Hostname or friendly label reported by the receiver server.
+     */
     fun setWifiMode(pcIp: String, serverName: String = "") {
         val label = if (serverName.isNotBlank() && serverName != "GlidePad PC") {
             "$serverName ($pcIp)"
@@ -306,6 +371,12 @@ class BluetoothHidManager(private val context: Context) {
         addLog("Connected to PC Receiver via Wi-Fi: $pcIp:8089")
     }
 
+    /**
+     * Updates round-trip latency and online status in the diagnostic flow for Wi-Fi mode.
+     *
+     * @param latencyMs Measured ping round-trip time in milliseconds.
+     * @param isOnline Whether the receiver is currently responding to heartbeats.
+     */
     fun updateWifiLatency(latencyMs: Long, isOnline: Boolean) {
         val current = _stats.value
         if (current.connectionMode == ConnectionMode.LOCAL_WIFI) {
@@ -316,6 +387,12 @@ class BluetoothHidManager(private val context: Context) {
         }
     }
 
+    /**
+     * Updates receiver availability and reconnection state for Wi-Fi streaming mode.
+     *
+     * @param isOnline Whether the receiver socket is reachable.
+     * @param pcIp The receiver server IP address.
+     */
     fun updateWifiOnline(isOnline: Boolean, pcIp: String) {
         val current = _stats.value
         if (current.connectionMode == ConnectionMode.LOCAL_WIFI) {
@@ -331,6 +408,9 @@ class BluetoothHidManager(private val context: Context) {
         }
     }
 
+    /**
+     * Switches the active connection mode indicator to low-latency Bluetooth HID.
+     */
     fun setBluetoothMode() {
         _stats.value = _stats.value.copy(
             connectionMode = ConnectionMode.BLUETOOTH_HID

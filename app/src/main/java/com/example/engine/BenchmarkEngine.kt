@@ -16,6 +16,14 @@ import java.net.SocketTimeoutException
 import kotlin.math.abs
 import kotlin.math.max
 
+/**
+ * Test configuration parameters for synthetic network benchmark passes.
+ *
+ * @property pingCount Number of consecutive round-trip ping datagrams transmitted in Stage 1.
+ * @property streamDurationSeconds Duration in seconds for continuous throughput stress testing.
+ * @property streamTargetHz Target packet dispatch rate per second during streaming phase.
+ * @property burstPacketCount Number of back-to-back packets sent during socket burst resilience tests.
+ */
 data class BenchmarkConfig(
     val pingCount: Int = 40,
     val streamDurationSeconds: Int = 3,
@@ -23,6 +31,9 @@ data class BenchmarkConfig(
     val burstPacketCount: Int = 100
 )
 
+/**
+ * Diagnostic results report generated upon completion of a full network benchmark run.
+ */
 data class BenchmarkReport(
     val testTimestamp: Long = System.currentTimeMillis(),
     val targetIp: String,
@@ -46,6 +57,9 @@ data class BenchmarkReport(
     val recommendation: String
 )
 
+/**
+ * Observable UI state model for active and completed network benchmark executions.
+ */
 sealed class BenchmarkState {
     object Idle : BenchmarkState()
     data class Running(
@@ -58,6 +72,13 @@ sealed class BenchmarkState {
     data class Error(val message: String) : BenchmarkState()
 }
 
+/**
+ * High-performance network diagnostic benchmark engine for Wi-Fi latency and throughput profiling.
+ *
+ * Runs multi-stage UDP stress tests against local and remote GlidePad receiver hosts to measure
+ * round-trip times (min, avg, p95, max), RFC 3550 jitter, packet loss percentage, and sustained
+ * streaming throughput in Hertz (packets per second).
+ */
 class BenchmarkEngine(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
@@ -289,6 +310,15 @@ class BenchmarkEngine(
             return kotlin.math.sqrt(sumSquaredDiffs / (values.size - 1))
         }
 
+        /**
+         * Grades network performance tier based on average latency, 95th percentile, packet loss, and jitter.
+         *
+         * @param avgLat Average round-trip ping time in ms.
+         * @param p95Lat 95th percentile latency in ms.
+         * @param lossPct Percentage of lost UDP datagrams.
+         * @param jitter Packet arrival jitter standard deviation in ms.
+         * @return Pair containing tier grade title and descriptive user assessment.
+         */
         fun evaluatePerformance(
             avgLat: Double,
             p95Lat: Long,

@@ -83,6 +83,11 @@ import com.example.ui.theme.SurfaceDark900
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 
+/**
+ * Primary Android Activity hosting the GlidePad user interface and lifecycle bindings.
+ *
+ * Configures edge-to-edge drawing, sets up Compose theming, and hosts [MainAppContent].
+ */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
@@ -98,6 +103,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Root Composable orchestrating the adaptive layout across form factors.
+ *
+ * Implements canonical responsive layout switching:
+ * - On compact handheld screens (< 600.dp): uses a bottom [NavigationBar] and [Scaffold].
+ * - On expanded screens (>= 600.dp, e.g. Chromebooks, landscape tablets, ChromeOS ARCVM):
+ *   uses a left-aligned [NavigationRail] with keyboard shortcut navigation (1-6, Esc).
+ *
+ * @param viewModel The shared [MainViewModel] supplying state and event dispatching.
+ */
 @Composable
 fun MainAppContent(viewModel: MainViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsState()

@@ -1,5 +1,11 @@
 package com.example.model
 
+/**
+ * Multi-touch gesture patterns recognized on the touchpad surface.
+ *
+ * @property label Descriptive title shown in settings.
+ * @property description Detailed gesture instruction.
+ */
 enum class GestureType(val label: String, val description: String) {
     ONE_FINGER_TAP("1-Finger Tap", "Single quick tap with one finger"),
     ONE_FINGER_DOUBLE_TAP_DRAG("1-Finger Double Tap & Hold", "Double tap and slide to drag selection or windows"),
@@ -16,6 +22,12 @@ enum class GestureType(val label: String, val description: String) {
     FOUR_FINGER_SWIPE_RIGHT("4-Finger Swipe Right", "Slide four fingers to the right")
 }
 
+/**
+ * Host operating system actions triggered upon gesture recognition.
+ *
+ * @property title Human-readable action label.
+ * @property iconName Material icon identifier for UI menus.
+ */
 enum class GestureAction(val title: String, val iconName: String) {
     NONE("None", "close"),
     LEFT_CLICK("Left Click", "mouse"),

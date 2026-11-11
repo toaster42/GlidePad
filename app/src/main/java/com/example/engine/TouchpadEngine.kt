@@ -8,6 +8,18 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
+/**
+ * Core kinematics and gesture engine for GlidePad trackpad operations.
+ *
+ * Translates raw multi-touch screen coordinates into filtered, accelerated mouse cursor movements,
+ * natural two-finger scrolling, and multi-finger desktop gesture invocations. Employs sub-pixel
+ * remainder accumulation to prevent cursor stair-stepping or rounding truncation during low-speed
+ * precision positioning.
+ *
+ * @param settings Current [TouchpadSettings] configuration controlling sensitivity, curves, and mappings.
+ * @param onSendMouse Callback dispatched when computed mouse reports are ready for network/HID transport.
+ * @param onTriggerAction Callback dispatched when multi-finger gestures match configured [GestureAction] rules.
+ */
 class TouchpadEngine(
     private var settings: TouchpadSettings,
     private val onSendMouse: (buttons: Byte, dx: Int, dy: Int, wheel: Int) -> Unit,
@@ -22,6 +34,11 @@ class TouchpadEngine(
     private var currentButtonsMask: Byte = 0
     private var isDragging = false
 
+    /**
+     * Updates active engine settings without resetting sub-pixel accumulator state.
+     *
+     * @param newSettings Updated [TouchpadSettings] reflecting latest user adjustments.
+     */
     fun updateSettings(newSettings: TouchpadSettings) {
         this.settings = newSettings
     }
@@ -100,28 +117,47 @@ class TouchpadEngine(
         }
     }
 
+    /**
+     * Handles a single-finger tap gesture, invoking configured [GestureType.ONE_FINGER_TAP] action.
+     */
     fun handleOneFingerTap() {
         if (!settings.tapToClick) return
         val action = settings.gestures[GestureType.ONE_FINGER_TAP] ?: GestureAction.LEFT_CLICK
         triggerGestureAction(action)
     }
 
+    /**
+     * Handles a two-finger tap gesture, invoking configured [GestureType.TWO_FINGER_TAP] action (secondary right-click).
+     */
     fun handleTwoFingerTap() {
         if (!settings.twoFingerRightClick) return
         val action = settings.gestures[GestureType.TWO_FINGER_TAP] ?: GestureAction.RIGHT_CLICK
         triggerGestureAction(action)
     }
 
+    /**
+     * Handles a three-finger tap gesture, invoking configured [GestureType.THREE_FINGER_TAP] action.
+     */
     fun handleThreeFingerTap() {
         val action = settings.gestures[GestureType.THREE_FINGER_TAP] ?: GestureAction.MIDDLE_CLICK
         triggerGestureAction(action)
     }
 
+    /**
+     * Handles a four-finger tap gesture, invoking configured [GestureType.FOUR_FINGER_TAP] action.
+     */
     fun handleFourFingerTap() {
         val action = settings.gestures[GestureType.FOUR_FINGER_TAP] ?: GestureAction.ACTION_CENTER
         triggerGestureAction(action)
     }
 
+    /**
+     * Handles a multi-finger directional swipe gesture.
+     *
+     * @param fingerCount Number of concurrent contact touch points (3 or 4).
+     * @param deltaX Total horizontal travel distance in pixels.
+     * @param deltaY Total vertical travel distance in pixels.
+     */
     fun handleSwipe(fingerCount: Int, deltaX: Float, deltaY: Float) {
         val isHorizontal = abs(deltaX) > abs(deltaY)
         val gestureType = when (fingerCount) {
@@ -146,12 +182,18 @@ class TouchpadEngine(
         triggerGestureAction(action)
     }
 
+    /**
+     * Engages mouse left-click button drag state for double-tap drag gestures.
+     */
     fun startDrag() {
         isDragging = true
         currentButtonsMask = (currentButtonsMask.toInt() or 1).toByte()
         onSendMouse(currentButtonsMask, 0, 0, 0)
     }
 
+    /**
+     * Releases active mouse drag state.
+     */
     fun stopDrag() {
         if (isDragging) {
             isDragging = false
@@ -160,6 +202,12 @@ class TouchpadEngine(
         }
     }
 
+    /**
+     * Updates persistent state of physical hardware buttons (e.g. left/right mouse button strip).
+     *
+     * @param buttonIndex 0 for left, 1 for right, 2 for middle.
+     * @param isPressed True if button is currently depressed.
+     */
     fun setPhysicalButtonState(buttonIndex: Int, isPressed: Boolean) {
         val bit = 1 shl buttonIndex
         currentButtonsMask = if (isPressed) {

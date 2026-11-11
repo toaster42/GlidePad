@@ -11,11 +11,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * Local persistence manager storing user configuration, preferences, and connection history.
+ *
+ * Persists and restores [TouchpadSettings] (sensitivity, kinematic curves, gesture bindings) and
+ * default target host IP/MAC addresses via Android [SharedPreferences], exposing updates through
+ * a reactive [settings] state flow.
+ *
+ * @param context Application context used to retrieve private shared preferences.
+ */
 class PreferencesManager(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences("glidepad_settings", Context.MODE_PRIVATE)
 
     private val _settings = MutableStateFlow(loadSettings())
+
+    /** Observable state flow of the active [TouchpadSettings]. */
     val settings: StateFlow<TouchpadSettings> = _settings.asStateFlow()
 
     private fun loadSettings(): TouchpadSettings {
@@ -71,6 +82,11 @@ class PreferencesManager(context: Context) {
         )
     }
 
+    /**
+     * Atomically commits updated touchpad settings to disk and emits to [settings] flow.
+     *
+     * @param newSettings Updated [TouchpadSettings] record.
+     */
     fun updateSettings(newSettings: TouchpadSettings) {
         prefs.edit().apply {
             putFloat(KEY_SENSITIVITY, newSettings.pointerSensitivity)
@@ -94,30 +110,37 @@ class PreferencesManager(context: Context) {
         _settings.value = newSettings
     }
 
+    /** Retrieves the last successfully targeted PC IP address. */
     fun getSavedPcIp(): String {
         return prefs.getString(KEY_PC_IP, "192.168.1.100") ?: "192.168.1.100"
     }
 
+    /** Persists the last targeted PC IP address. */
     fun setSavedPcIp(ip: String) {
         prefs.edit().putString(KEY_PC_IP, ip).apply()
     }
 
+    /** Retrieves the last active [com.example.model.ConnectionMode] string. */
     fun getSavedConnectionMode(): String {
         return prefs.getString(KEY_CONNECTION_MODE, "LOCAL_WIFI") ?: "LOCAL_WIFI"
     }
 
+    /** Persists the last active connection mode. */
     fun setSavedConnectionMode(mode: String) {
         prefs.edit().putString(KEY_CONNECTION_MODE, mode).apply()
     }
 
+    /** Retrieves the target computer's physical MAC address. */
     fun getSavedMacAddress(): String {
         return prefs.getString(KEY_MAC_ADDRESS, "00:11:22:33:44:55") ?: "00:11:22:33:44:55"
     }
 
+    /** Persists the target computer's physical MAC address for Wake-on-LAN. */
     fun setSavedMacAddress(mac: String) {
         prefs.edit().putString(KEY_MAC_ADDRESS, mac).apply()
     }
 
+    /** Resets all touchpad settings, curves, and gestures to out-of-the-box defaults. */
     fun resetToDefaults() {
         val default = TouchpadSettings()
         updateSettings(default)

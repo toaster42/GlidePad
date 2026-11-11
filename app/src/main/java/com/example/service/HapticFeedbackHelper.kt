@@ -7,6 +7,14 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import com.example.model.HapticLevel
 
+/**
+ * Haptic feedback manager providing tactile response for clicks, taps, and gesture recognition.
+ *
+ * Utilizes [VibratorManager] on Android 12+ (API 31+) and falls back to legacy [Vibrator] on older
+ * versions, producing calibrated haptic waveforms according to the user's selected [HapticLevel].
+ *
+ * @param context Application context used to resolve the system vibrator service.
+ */
 class HapticFeedbackHelper(context: Context) {
 
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -17,6 +25,11 @@ class HapticFeedbackHelper(context: Context) {
         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 
+    /**
+     * Produces a discrete click sensation for mouse button presses and virtual keyboard strikes.
+     *
+     * @param level User-configured [HapticLevel] vibration intensity.
+     */
     fun click(level: HapticLevel) {
         if (level == HapticLevel.OFF || vibrator == null || !vibrator.hasVibrator()) return
 
@@ -43,6 +56,11 @@ class HapticFeedbackHelper(context: Context) {
         }
     }
 
+    /**
+     * Produces a double-tick confirmation waveform upon multi-finger gesture recognition.
+     *
+     * @param level User-configured [HapticLevel] vibration intensity.
+     */
     fun gestureTriggered(level: HapticLevel) {
         if (level == HapticLevel.OFF || vibrator == null || !vibrator.hasVibrator()) return
 

@@ -9,10 +9,23 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Repository managing real-time Firestore synchronization for user-defined macro decks.
+ *
+ * Persists and observes documents in the path `users/{userId}/macros`.
+ *
+ * @param context Context used to resolve Firestore instance.
+ */
 class CloudMacrosRepository(private val context: Context) {
 
     private val firestore by lazy { FirestoreProvider.get(context) }
 
+    /**
+     * Emits a real-time reactive [Flow] of macros configured for the authenticated [userId].
+     *
+     * @param userId Authenticated user UID.
+     * @return Hot flow of macro items ordered by [CloudMacro.sortOrder].
+     */
     fun observeMacros(userId: String): Flow<List<CloudMacro>> = callbackFlow {
         if (userId.isBlank()) {
             trySend(emptyList())
@@ -62,6 +75,13 @@ class CloudMacrosRepository(private val context: Context) {
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Creates or updates a [CloudMacro] in the user's private collection.
+     *
+     * @param userId Authenticated user UID.
+     * @param macro Macro record to persist.
+     * @return [Result] containing document ID upon success.
+     */
     suspend fun saveMacro(userId: String, macro: CloudMacro): Result<String> {
         return try {
             val userMacros = firestore.collection("users").document(userId).collection("macros")
@@ -78,6 +98,12 @@ class CloudMacrosRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Deletes a macro document from Firestore.
+     *
+     * @param userId Authenticated user UID.
+     * @param macroId Document ID of the macro to delete.
+     */
     suspend fun deleteMacro(userId: String, macroId: String): Result<Unit> {
         return try {
             firestore.collection("users").document(userId)

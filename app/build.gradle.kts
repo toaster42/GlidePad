@@ -6,6 +6,7 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+  alias(libs.plugins.dokka)
 }
 
 android {
@@ -142,3 +143,11 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.withType<org.jetbrains.dokka.gradle.DokkaTask>().configureEach {
+  dokkaSourceSets.register("main") {
+    sourceRoots.from(file("src/main/java"))
+    includeNonPublic.set(false)
+  }
+}
+

@@ -36,15 +36,43 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Primary navigation destinations in the GlidePad user interface.
+ *
+ * @property title Human-readable screen title for top app bars and navigation rails.
+ */
 enum class AppScreen(val title: String) {
+    /** Primary interactive multitouch trackpad canvas. */
     TOUCHPAD("Touchpad"),
+
+    /** Full PC keyboard simulator with function keys and modifier toggles. */
     KEYBOARD("Keyboard"),
+
+    /** Deck of customizable productivity macros and hotkeys. */
     MACROS("Quick Macros"),
+
+    /** Interactive virtual desktop preview simulating remote mouse cursor movement. */
     VIRTUAL_SCREEN("Live Preview"),
+
+    /** Fine-grained trackpad tuning, gestures, and haptics preferences. */
     SETTINGS("Settings & Tuning"),
+
+    /** Embedded ChromeOS in-app UDP receiver dashboard. */
     RECEIVER("Host Receiver")
 }
 
+/**
+ * State snapshot representing the interactive Virtual PC Desktop simulation.
+ *
+ * @property cursorX Normalized horizontal cursor coordinate in `0.0..1.0`.
+ * @property cursorY Normalized vertical cursor coordinate in `0.0..1.0`.
+ * @property isLeftDown Whether left mouse button is depressed.
+ * @property isRightDown Whether right mouse button is depressed.
+ * @property clickRippleX Horizontal coordinate for visual click ripple animation, or null.
+ * @property clickRippleY Vertical coordinate for visual click ripple animation, or null.
+ * @property activeWindowIndex Index of the simulated frontmost OS window.
+ * @property recentGestureNotification Optional toast/HUD banner describing the last gesture executed.
+ */
 data class VirtualScreenState(
     val cursorX: Float = 0.5f, // Normalized 0f..1f
     val cursorY: Float = 0.5f, // Normalized 0f..1f
@@ -56,62 +84,114 @@ data class VirtualScreenState(
     val recentGestureNotification: String? = null
 )
 
+/**
+ * Central ViewModel orchestrating GlidePad's hardware, network, engine, and UI state flows.
+ *
+ * Bridges the low-level [BluetoothHidManager] and [NetworkStreamManager] transports with
+ * the [TouchpadEngine] gesture recognizer, handles cloud profile persistence with Firebase Firestore,
+ * and maintains UI state for all Compose screens.
+ *
+ * @param application Application context for accessing system services and DataStore preferences.
+ */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    /** Local persistent preferences storage manager. */
     val preferencesManager = PreferencesManager(application)
+
+    /** Device vibrator and tactile haptics feedback helper. */
     val hapticHelper = HapticFeedbackHelper(application)
+
+    /** Bluetooth HID Device profile controller. */
     val bluetoothManager = BluetoothHidManager(application)
+
+    /** Wi-Fi UDP streaming client manager. */
     val networkManager = NetworkStreamManager(application)
+
+    /** In-app local UDP server receiver for ChromeOS / Android tablet receivers. */
     val inAppReceiverManager = com.example.service.InAppReceiverManager(application)
 
     // Firebase & Cloud Repositories
+    /** Google Sign-In and Firebase Auth session manager. */
     val authManager = AuthManager(application)
+
+    /** Cloud Firestore repository for user-synchronized macros. */
     val cloudMacrosRepo = CloudMacrosRepository(application)
+
+    /** Cloud Firestore repository for user PC sensitivity profiles. */
     val pcProfilesRepo = PcProfilesRepository(application)
+
+    /** Cloud Firestore repository for bug and feature feedback submissions. */
     val feedbackRepo = FeedbackRepository(application)
+
+    /** Cloud Firestore repository for diagnostic error reports. */
     val errorReportsRepo = ErrorReportsRepository(application)
 
     // Benchmark Engine
+    /** Real-time latency, throughput, and packet jitter benchmark test engine. */
     val benchmarkEngine = com.example.engine.BenchmarkEngine(viewModelScope)
+
+    /** State flow observing active network benchmark results. */
     val benchmarkState: StateFlow<com.example.engine.BenchmarkState> = benchmarkEngine.state
 
+    /** State flow observing the currently authenticated Firebase user, or null. */
     val currentUser: StateFlow<FirebaseUser?> = authManager.currentUser
 
     private val _cloudMacros = MutableStateFlow<List<CloudMacro>>(emptyList())
+
+    /** Cloud-synchronized quick macros for the signed-in user. */
     val cloudMacros: StateFlow<List<CloudMacro>> = _cloudMacros.asStateFlow()
 
     private val _savedProfiles = MutableStateFlow<List<SavedPcProfile>>(emptyList())
+
+    /** Cloud-synchronized PC sensitivity profiles for the signed-in user. */
     val savedProfiles: StateFlow<List<SavedPcProfile>> = _savedProfiles.asStateFlow()
 
     private val _syncMessage = MutableStateFlow<String?>(null)
+
+    /** Transient snackbar or status notification string from cloud sync operations. */
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
 
     private var macroSyncJob: Job? = null
     private var profileSyncJob: Job? = null
 
+    /** Flow exposing active touchpad sensitivity, acceleration, and gesture mapping settings. */
     val settings: StateFlow<TouchpadSettings> = preferencesManager.settings
+
+    /** Flow exposing live diagnostic telemetry (RTT, packets sent, mode, connected PC name). */
     val stats: StateFlow<DiagnosticStats> = bluetoothManager.stats
 
     private val _currentScreen = MutableStateFlow(AppScreen.TOUCHPAD)
+
+    /** Flow indicating the currently active screen destination in the app. */
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
     private val _virtualScreen = MutableStateFlow(VirtualScreenState())
+
+    /** Flow exposing the state of the interactive virtual PC desktop preview. */
     val virtualScreen: StateFlow<VirtualScreenState> = _virtualScreen.asStateFlow()
 
     // Sticky modifier keys for keyboard
     private val _ctrlHeld = MutableStateFlow(false)
+
+    /** Flow tracking whether the keyboard Ctrl modifier is held down. */
     val ctrlHeld: StateFlow<Boolean> = _ctrlHeld.asStateFlow()
 
     private val _shiftHeld = MutableStateFlow(false)
+
+    /** Flow tracking whether the keyboard Shift modifier is held down. */
     val shiftHeld: StateFlow<Boolean> = _shiftHeld.asStateFlow()
 
     private val _altHeld = MutableStateFlow(false)
+
+    /** Flow tracking whether the keyboard Alt modifier is held down. */
     val altHeld: StateFlow<Boolean> = _altHeld.asStateFlow()
 
     private val _winHeld = MutableStateFlow(false)
+
+    /** Flow tracking whether the keyboard Windows / Super modifier is held down. */
     val winHeld: StateFlow<Boolean> = _winHeld.asStateFlow()
 
-    // Default macro decks
+    /** Built-in preconfigured deck of common OS and productivity macros. */
     val defaultMacros = listOf(
         MacroItem("copy", "Copy", "Ctrl + C", listOf("Ctrl", "C")),
         MacroItem("paste", "Paste", "Ctrl + V", listOf("Ctrl", "V")),
@@ -129,6 +209,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         MacroItem("switch_app", "Switch App", "Alt + Tab", listOf("Alt", "Tab"))
     )
 
+    /** Low-level touchpad acceleration and multitouch gesture processing engine. */
     val touchpadEngine = TouchpadEngine(
         settings = settings.value,
         onSendMouse = { buttons, dx, dy, wheel ->
@@ -252,10 +333,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         bluetoothManager.initialize()
     }
 
+    /**
+     * Navigates to a specific [AppScreen] destination in the application UI.
+     *
+     * @param screen Target screen destination.
+     */
     fun selectScreen(screen: AppScreen) {
         _currentScreen.value = screen
     }
 
+    /**
+     * Dispatches relative mouse pointer deltas, scroll wheel events, and button states
+     * through the active connection transport (Bluetooth HID, Wi-Fi UDP, or simulation).
+     *
+     * @param buttons Mouse button bitmask (1=left, 2=right, 4=middle).
+     * @param dx Relative horizontal movement in counts.
+     * @param dy Relative vertical movement in counts.
+     * @param wheel Scroll wheel delta.
+     */
     fun sendMouse(buttons: Byte, dx: Int, dy: Int, wheel: Int) {
         when (stats.value.connectionMode) {
             ConnectionMode.BLUETOOTH_HID -> {
@@ -311,6 +406,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Executes a recognized multi-finger desktop OS action, triggering haptics, HUD notification,
+     * and transmitting corresponding keystrokes or mouse reports.
+     *
+     * @param action High-level gesture action to execute.
+     */
     fun executeGestureAction(action: GestureAction) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         _virtualScreen.value = _virtualScreen.value.copy(
@@ -394,6 +495,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Toggles the sticky state of a modifier key (Ctrl, Shift, Alt, or Win).
+     *
+     * @param modifier Key name string ("Ctrl", "Shift", "Alt", "Win").
+     */
     fun toggleModifier(modifier: String) {
         hapticHelper.click(settings.value.hapticLevel)
         when (modifier) {
@@ -404,6 +510,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Sends a keyboard key press with current sticky modifier masks to the host.
+     *
+     * @param keyLabel Printable or descriptive key label for display.
+     * @param hidCode USB HID Usage code for keyboard report.
+     */
     fun sendKeyPress(keyLabel: String, hidCode: Byte) {
         hapticHelper.click(settings.value.hapticLevel)
         var modifierMask: Byte = 0
@@ -420,6 +532,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Transmits a string directly to the host PC for automated typing.
+     *
+     * @param text Text string to type on the target computer.
+     */
     fun sendTextDirect(text: String) {
         if (text.isBlank()) return
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
@@ -430,6 +547,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Executes a predefined macro shortcut item.
+     *
+     * @param macro Macro descriptor item containing key chords or actions.
+     */
     fun executeMacro(macro: MacroItem) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         networkManager.sendKeyPacket(macro.shortcutKeys, "macro")
@@ -439,54 +561,109 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    // Settings adjustments
+    /**
+     * Updates the cursor pointer tracking sensitivity.
+     *
+     * @param value Sensitivity scalar.
+     */
     fun setPointerSensitivity(value: Float) {
         preferencesManager.updateSettings(settings.value.copy(pointerSensitivity = value))
     }
 
+    /**
+     * Updates the active ballistic acceleration profile curve.
+     *
+     * @param profile Ballistic profile (Linear, Smooth, Dynamic, Gaming).
+     */
     fun setAccelerationProfile(profile: AccelerationProfile) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.updateSettings(settings.value.copy(accelerationProfile = profile))
     }
 
+    /**
+     * Updates the cursor acceleration velocity multiplier.
+     *
+     * @param multiplier Velocity exponent multiplier factor.
+     */
     fun setAccelerationMultiplier(multiplier: Float) {
         preferencesManager.updateSettings(settings.value.copy(accelerationMultiplier = multiplier))
     }
 
+    /**
+     * Updates the two-finger scroll speed sensitivity.
+     *
+     * @param value Scroll sensitivity scalar.
+     */
     fun setScrollSensitivity(value: Float) {
         preferencesManager.updateSettings(settings.value.copy(scrollSensitivity = value))
     }
 
+    /**
+     * Sets whether vertical scroll direction is natural (content follows fingers) or inverted.
+     *
+     * @param natural True for natural scroll; false for traditional wheel direction.
+     */
     fun setNaturalScroll(natural: Boolean) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.updateSettings(settings.value.copy(naturalScroll = natural))
     }
 
+    /**
+     * Toggles smooth kinetic inertia momentum after two-finger flick scrolling.
+     *
+     * @param inertia True to enable kinetic inertia decay.
+     */
     fun setSmoothInertia(inertia: Boolean) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.updateSettings(settings.value.copy(smoothInertia = inertia))
     }
 
+    /**
+     * Toggles single-finger tap-to-click gesture recognition.
+     *
+     * @param tap True to enable tap-to-click.
+     */
     fun setTapToClick(tap: Boolean) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.updateSettings(settings.value.copy(tapToClick = tap))
     }
 
+    /**
+     * Toggles drag lock mode for double-tap drag gestures.
+     *
+     * @param dragLock True to keep drag active until next tap.
+     */
     fun setDragLock(dragLock: Boolean) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.updateSettings(settings.value.copy(dragLock = dragLock))
     }
 
+    /**
+     * Toggles secondary right click trigger via two-finger tap.
+     *
+     * @param enabled True to trigger right click on two-finger tap.
+     */
     fun setTwoFingerRightClick(enabled: Boolean) {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.updateSettings(settings.value.copy(twoFingerRightClick = enabled))
     }
 
+    /**
+     * Configures the tactile haptic feedback vibration intensity.
+     *
+     * @param level Tactile feedback intensity level.
+     */
     fun setHapticLevel(level: HapticLevel) {
         hapticHelper.click(level)
         preferencesManager.updateSettings(settings.value.copy(hapticLevel = level))
     }
 
+    /**
+     * Maps a specific multi-finger gesture type to an operating system action.
+     *
+     * @param type Touchpad gesture pattern.
+     * @param action Target desktop action to execute.
+     */
     fun setGestureAction(type: GestureType, action: GestureAction) {
         hapticHelper.click(settings.value.hapticLevel)
         val updated = settings.value.gestures.toMutableMap()
@@ -494,19 +671,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         preferencesManager.updateSettings(settings.value.copy(gestures = updated))
     }
 
+    /**
+     * Resets all trackpad, acceleration, and gesture settings to factory defaults.
+     */
     fun resetSettingsToDefault() {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         preferencesManager.resetToDefaults()
     }
 
+    /**
+     * Connects to a bonded target Bluetooth peripheral device.
+     *
+     * @param device Target Bluetooth host.
+     */
     fun connectToBluetoothDevice(device: BluetoothDevice) {
         bluetoothManager.connectToDevice(device)
     }
 
+    /**
+     * Disconnects from the current Bluetooth host.
+     */
     fun disconnect() {
         bluetoothManager.disconnect()
     }
 
+    /**
+     * Switches the active connection transport mode (Bluetooth HID, Wi-Fi UDP, or Simulation).
+     *
+     * @param mode Target connection mode.
+     * @param param Optional IP address parameter for Wi-Fi mode.
+     */
     fun switchConnectionMode(mode: ConnectionMode, param: String = "") {
         hapticHelper.click(settings.value.hapticLevel)
         preferencesManager.setSavedConnectionMode(mode.name)
@@ -537,6 +731,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Instructs the connected PC receiver to launch its default web browser to [url].
+     *
+     * @param url Web URL to open on the PC host.
+     */
     fun openUrlOnPc(url: String) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         networkManager.sendOpenUrl(url)
@@ -546,6 +745,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Dispatches a named system command string to the PC receiver (e.g. lock, sleep).
+     *
+     * @param command Command keyword recognized by the receiver script.
+     * @param displayLabel Human-readable notification banner text.
+     */
     fun sendSystemCmdToPc(command: String, displayLabel: String) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         networkManager.sendSystemCommand(command)
@@ -555,6 +760,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Dispatches a standard Wake-on-LAN magic packet and updates persistent saved MAC in preferences.
+     *
+     * @param macAddress Target PC network card MAC address string.
+     */
     fun sendWakeOnLan(macAddress: String) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         preferencesManager.setSavedMacAddress(macAddress)
@@ -565,6 +775,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Transmits clipboard text directly to the PC receiver for instant remote typing.
+     *
+     * @param text Text string to send.
+     */
     fun sendClipboardTextToPc(text: String) {
         if (text.isBlank()) return
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
@@ -575,7 +790,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    // Google Sign-In & Authentication
+    /**
+     * Initiates Google Sign-In using Android Credential Manager and Firebase Authentication.
+     *
+     * @param context Activity context for launching Credential Manager bottom sheet.
+     * @param onResult Completion callback returning success boolean and optional error message.
+     */
     fun signInWithGoogle(context: Context, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             val result = authManager.signInWithGoogle(context)
@@ -590,6 +810,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Signs out of the active Google and Firebase Authentication sessions.
+     *
+     * @param context Context for Credential Manager clear request.
+     */
     fun signOut(context: Context) {
         viewModelScope.launch {
             authManager.signOut(context)
@@ -597,11 +822,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Clears any active cloud synchronization message notification banner.
+     */
     fun clearSyncMessage() {
         _syncMessage.value = null
     }
 
-    // Cloud Macros Management
+    /**
+     * Saves or updates a custom macro definition in Cloud Firestore for the signed-in user.
+     *
+     * @param macro Cloud macro descriptor.
+     * @param onComplete Callback returning success flag and optional error string.
+     */
     fun saveCloudMacro(macro: CloudMacro, onComplete: (Boolean, String?) -> Unit) {
         val user = currentUser.value
         if (user == null) {
@@ -619,6 +852,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Deletes a cloud-stored macro definition from Cloud Firestore.
+     *
+     * @param macroId Unique identifier of the macro document.
+     * @param onComplete Callback with success boolean.
+     */
     fun deleteCloudMacro(macroId: String, onComplete: (Boolean) -> Unit) {
         val user = currentUser.value ?: return
         viewModelScope.launch {
@@ -627,6 +866,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Executes a cloud-synced macro, dispatching either a URL launch, system command, or hotkey sequence.
+     *
+     * @param macro Cloud macro instance to run.
+     */
     fun executeCloudMacro(macro: CloudMacro) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         when (macro.actionType) {
@@ -648,7 +892,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Cloud PC Profiles Management
+    /**
+     * Snapshots the active PC connection and touchpad sensitivity settings into a named Cloud Firestore profile.
+     *
+     * @param name Descriptive profile name (e.g. "Workstation Desktop", "MacBook Pro").
+     * @param onComplete Callback with success flag and optional error message.
+     */
     fun saveCurrentAsPcProfile(name: String, onComplete: (Boolean, String?) -> Unit) {
         val user = currentUser.value
         if (user == null) {
@@ -676,6 +925,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Deletes a saved PC profile from Cloud Firestore.
+     *
+     * @param profileId Unique document ID of the profile.
+     * @param onComplete Callback with success boolean.
+     */
     fun deletePcProfile(profileId: String, onComplete: (Boolean) -> Unit) {
         val user = currentUser.value ?: return
         viewModelScope.launch {
@@ -684,6 +939,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Applies a saved cloud PC profile's IP, MAC address, sensitivity, and acceleration curve to the active session.
+     *
+     * @param profile PC profile to apply.
+     */
     fun applyPcProfile(profile: SavedPcProfile) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         preferencesManager.setSavedPcIp(profile.ipAddress)
@@ -706,7 +966,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _syncMessage.value = "Applied profile \"${profile.name}\""
     }
 
-    // Feedback & Error Reporting
+    /**
+     * Submits user feedback (bug report, feature request, or general commentary) to Cloud Firestore.
+     *
+     * @param title Brief summary title.
+     * @param description Detailed issue description or request.
+     * @param category Classification category ("Bug", "Feature Request", "Question", "Praise").
+     * @param onComplete Callback with success flag and optional error message.
+     */
     fun submitFeedback(
         title: String,
         description: String,
@@ -737,6 +1004,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Submits an automated diagnostic snapshot and recent telemetry log excerpt to Cloud Firestore.
+     *
+     * @param userComments Optional user explanation accompanying the report.
+     * @param onComplete Callback with success flag and optional error message.
+     */
     fun submitErrorReport(
         userComments: String,
         onComplete: (Boolean, String?) -> Unit
@@ -768,17 +1041,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Benchmark Controls
+    /**
+     * Executes the comprehensive network benchmark suite (latency, packet jitter, and throughput).
+     *
+     * @param targetIp Host IP address to benchmark against.
+     */
     fun runNetworkBenchmark(targetIp: String = networkManager.pcIpAddress) {
         hapticHelper.gestureTriggered(settings.value.hapticLevel)
         benchmarkEngine.runFullBenchmark(targetIp)
     }
 
+    /**
+     * Resets active benchmark test state back to idle.
+     */
     fun resetBenchmark() {
         benchmarkEngine.reset()
     }
 
-    // ChromeOS In-App Receiver Controls
+    /**
+     * Toggles the local ChromeOS in-app UDP receiver server state.
+     *
+     * @param port UDP port number to listen on (default 8089).
+     * @return True if receiver was started, false if stopped or failed to bind.
+     */
     fun toggleInAppReceiver(port: Int = 8089): Boolean {
         hapticHelper.click(settings.value.hapticLevel)
         return if (inAppReceiverManager.isRunning.value) {
@@ -789,6 +1074,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Resets packet and throughput telemetry statistics on the in-app receiver.
+     */
     fun resetReceiverStats() {
         inAppReceiverManager.resetStats()
     }

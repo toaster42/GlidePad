@@ -1,6 +1,0 @@
-{
-  "summary": "Comprehensive architectural implementation plan detailing the ChromeOS and Googlebook OS adaptation for GlidePad: hardware feature relaxation, freeform resizable multi-window desktop support, adaptive NavigationRail on expanded screens, physical mouse/keyboard event handling, and built-in ChromeOS In-App Receiver mode.",
-  "updatedAt": "2026-11-02T20:32:39.830198555Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

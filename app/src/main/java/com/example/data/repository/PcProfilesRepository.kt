@@ -9,10 +9,23 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Repository managing cloud synchronization for saved target PC connection profiles.
+ *
+ * Persists and observes documents under `users/{userId}/pc_profiles`.
+ *
+ * @param context Application context used to resolve the Firestore database client.
+ */
 class PcProfilesRepository(private val context: Context) {
 
     private val firestore by lazy { FirestoreProvider.get(context) }
 
+    /**
+     * Emits a real-time reactive [Flow] of saved PC profiles for the specified [userId].
+     *
+     * @param userId Authenticated user UID.
+     * @return Flow emitting updated profile lists upon remote database mutation.
+     */
     fun observeProfiles(userId: String): Flow<List<SavedPcProfile>> = callbackFlow {
         if (userId.isBlank()) {
             trySend(emptyList())
@@ -64,6 +77,13 @@ class PcProfilesRepository(private val context: Context) {
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Saves or updates a target PC connection profile in Firestore.
+     *
+     * @param userId Authenticated user UID.
+     * @param profile [SavedPcProfile] instance to persist.
+     * @return [Result] containing document ID upon successful commit.
+     */
     suspend fun saveProfile(userId: String, profile: SavedPcProfile): Result<String> {
         return try {
             val profilesCol = firestore.collection("users").document(userId).collection("pc_profiles")
@@ -80,6 +100,12 @@ class PcProfilesRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Deletes a saved PC profile from the user's Firestore collection.
+     *
+     * @param userId Authenticated user UID.
+     * @param profileId Unique document ID of the profile.
+     */
     suspend fun deleteProfile(userId: String, profileId: String): Result<Unit> {
         return try {
             firestore.collection("users").document(userId)

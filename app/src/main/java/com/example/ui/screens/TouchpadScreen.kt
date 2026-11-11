@@ -70,8 +70,22 @@ import com.example.ui.theme.TextSecondary
 import java.util.Locale
 import kotlin.math.abs
 
+/**
+ * Transient contact point tracked on the multitouch surface for visual finger tracking indicators.
+ *
+ * @property id Pointer contact ID.
+ * @property x Local horizontal coordinate in pixels.
+ * @property y Local vertical coordinate in pixels.
+ */
 data class TouchPoint(val id: Long, val x: Float, val y: Float)
 
+/**
+ * Primary touchpad surface composable with multitouch gesture recognition and haptic feedback.
+ *
+ * @param viewModel Shared [MainViewModel] providing gesture dispatch and pointer telemetry.
+ * @param settings Active [TouchpadSettings] configuring sensitivity, ballistics, and gestures.
+ * @param modifier Composable layout modifier.
+ */
 @Composable
 fun TouchpadScreen(
     viewModel: MainViewModel,
