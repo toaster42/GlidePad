@@ -17,6 +17,8 @@ import com.example.model.DiagnosticStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.Executors
+
 /**
  * Bluetooth Human Interface Device (HID) manager.
  *
