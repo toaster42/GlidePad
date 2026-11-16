@@ -33,6 +33,27 @@ data class BenchmarkConfig(
 
 /**
  * Diagnostic results report generated upon completion of a full network benchmark run.
+ *
+ * @property testTimestamp Epoch timestamp (in milliseconds) when the benchmark report was created.
+ * @property targetIp Target host IPv4 address tested during the benchmark run.
+ * @property targetPort UDP port number tested on the target host.
+ * @property pingsSent Total number of round-trip ping datagrams sent in Stage 1.
+ * @property pongsReceived Total number of echo reply datagrams received in Stage 1.
+ * @property pingLossPct Percentage of lost ping datagrams (0.0 to 100.0).
+ * @property minLatencyMs Minimum observed round-trip latency in milliseconds.
+ * @property avgLatencyMs Arithmetic mean round-trip latency in milliseconds.
+ * @property medianLatencyMs 50th percentile (median) round-trip latency in milliseconds.
+ * @property p90LatencyMs 90th percentile round-trip latency in milliseconds.
+ * @property p95LatencyMs 95th percentile round-trip latency in milliseconds.
+ * @property p99LatencyMs 99th percentile round-trip latency in milliseconds.
+ * @property maxLatencyMs Maximum observed round-trip latency in milliseconds.
+ * @property jitterMs Exponentially smoothed inter-packet arrival jitter in milliseconds (RFC 3550).
+ * @property jitterStdDevMs Sample standard deviation of round-trip latency in milliseconds.
+ * @property streamPacketsSent Total high-frequency UDP packets dispatched in Stage 2.
+ * @property streamPacketsAcked Total stream packets acknowledged by the receiver host in Stage 2.
+ * @property streamMeasuredHz Effective sustained packet dispatch rate in Hertz (packets/sec).
+ * @property grade Overall connection quality grade label (e.g., `A+`, `A`, `B`, `C`).
+ * @property recommendation Actionable diagnostic recommendation based on the measured metrics.
  */
 data class BenchmarkReport(
     val testTimestamp: Long = System.currentTimeMillis(),
@@ -61,14 +82,36 @@ data class BenchmarkReport(
  * Observable UI state model for active and completed network benchmark executions.
  */
 sealed class BenchmarkState {
+    /** Initial state before a benchmark has started or after [BenchmarkEngine.reset] is called. */
     object Idle : BenchmarkState()
+
+    /**
+     * Indicates an active benchmark pass is currently executing.
+     *
+     * @property stage Human-readable description of the active test phase.
+     * @property progress Normalized completion progress in the range `[0.0, 1.0]`.
+     * @property currentLatencyMs Most recently measured ping round-trip latency in milliseconds.
+     * @property currentHz Most recently measured packet streaming rate in Hertz.
+     */
     data class Running(
         val stage: String,
         val progress: Float,
         val currentLatencyMs: Long = 0,
         val currentHz: Double = 0.0
     ) : BenchmarkState()
+
+    /**
+     * Indicates the benchmark finished successfully with a synthesized [BenchmarkReport].
+     *
+     * @property report The finalized diagnostic metrics and performance grade.
+     */
     data class Completed(val report: BenchmarkReport) : BenchmarkState()
+
+    /**
+     * Indicates the benchmark aborted due to a socket error or unreachable receiver host.
+     *
+     * @property message Diagnostic error description explaining the failure.
+     */
     data class Error(val message: String) : BenchmarkState()
 }
 
@@ -78,21 +121,35 @@ sealed class BenchmarkState {
  * Runs multi-stage UDP stress tests against local and remote GlidePad receiver hosts to measure
  * round-trip times (min, avg, p95, max), RFC 3550 jitter, packet loss percentage, and sustained
  * streaming throughput in Hertz (packets per second).
+ *
+ * @param scope Coroutine scope used to launch asynchronous UDP socket benchmark jobs.
  */
 class BenchmarkEngine(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
 
     private val _state = MutableStateFlow<BenchmarkState>(BenchmarkState.Idle)
+
+    /** Reactive stream of the current [BenchmarkState] for UI observation. */
     val state: StateFlow<BenchmarkState> = _state.asStateFlow()
 
     private var activeJob: Job? = null
 
+    /**
+     * Cancels any running benchmark job and resets [state] back to [BenchmarkState.Idle].
+     */
     fun reset() {
         activeJob?.cancel()
         _state.value = BenchmarkState.Idle
     }
 
+    /**
+     * Executes a full multi-stage UDP latency, jitter, and 120Hz throughput benchmark against [targetIp].
+     *
+     * @param targetIp Target receiver IPv4 address or hostname.
+     * @param targetPort Target UDP port on the receiver host (defaults to `8089`).
+     * @param config Configuration parameters controlling ping count and stream duration.
+     */
     fun runFullBenchmark(
         targetIp: String,
         targetPort: Int = 8089,

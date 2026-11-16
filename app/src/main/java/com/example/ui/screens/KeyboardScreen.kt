@@ -69,6 +69,15 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Full-featured remote keyboard, media transport, and navigation screen.
+ *
+ * Provides direct text string transmission, sticky modifier toggles (`Ctrl`, `Shift`, `Alt`, `Win`),
+ * function keys (`F1`–`F12`), media playback and volume controls, and a QWERTY + directional keypad.
+ *
+ * @param viewModel Application [MainViewModel] dispatching keystrokes, text buffers, and media actions.
+ * @param modifier Optional [Modifier] applied to the root layout column.
+ */
 @Composable
 fun KeyboardScreen(
     viewModel: MainViewModel,
@@ -388,6 +397,16 @@ fun KeyboardScreen(
     }
 }
 
+/**
+ * Styled virtual keycap button used across the [KeyboardScreen] QWERTY, function, modifier, and navigation rows.
+ *
+ * @param label Text or symbol displayed on the keycap and used in its UI test tag (`key_<label>`).
+ * @param modifier Optional [Modifier] applied to the key container.
+ * @param width Optional explicit width for the keycap; if `null`, uses [modifier] sizing.
+ * @param height Height of the keycap (defaults to `40.dp`).
+ * @param isToggled Whether the key is currently latched/active (e.g., sticky modifier keys).
+ * @param onClick Callback invoked when the keycap is tapped.
+ */
 @Composable
 fun KeyButton(
     label: String,

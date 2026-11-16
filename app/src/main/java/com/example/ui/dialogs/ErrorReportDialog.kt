@@ -49,6 +49,12 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Diagnostic bug report dialog that bundles current transport telemetry and recent event logs with optional user notes.
+ *
+ * @param viewModel Application [MainViewModel] used to collect telemetry snapshots and submit the report to Firestore.
+ * @param onDismiss Callback invoked when the dialog is closed.
+ */
 @Composable
 fun ErrorReportDialog(
     viewModel: MainViewModel,

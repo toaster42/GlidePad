@@ -876,6 +876,9 @@ while True:
         pass
         """.trimIndent()
 
+        /**
+         * Standalone Python 3 latency, RFC 3550 jitter, and 120Hz throughput benchmarking receiver script (v1.1).
+         */
         val PYTHON_BENCHMARK_RECEIVER_SCRIPT = """
 #!/usr/bin/env python3
 # ==============================================================================

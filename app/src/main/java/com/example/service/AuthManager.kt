@@ -32,6 +32,8 @@ class AuthManager(private val context: Context) {
     }
 
     private val _currentUser = MutableStateFlow<FirebaseUser?>(null)
+
+    /** Reactive stream of the currently authenticated [FirebaseUser], or `null` if signed out. */
     val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
 
     init {
@@ -45,6 +47,12 @@ class AuthManager(private val context: Context) {
         }
     }
 
+    /**
+     * Initiates an interactive Google Sign-In flow via Android [CredentialManager] and authenticates with Firebase.
+     *
+     * @param activityContext Foreground Activity context required to anchor the credential picker sheet.
+     * @return [Result] containing the signed-in [FirebaseUser] on success, or the thrown exception on failure.
+     */
     suspend fun signInWithGoogle(activityContext: Context): Result<FirebaseUser> {
         return try {
             val credentialManager = CredentialManager.create(activityContext)
@@ -74,6 +82,12 @@ class AuthManager(private val context: Context) {
         }
     }
 
+    /**
+     * Signs the current user out of Firebase Authentication and clears cached credentials in [CredentialManager].
+     *
+     * @param activityContext Context used to access the platform [CredentialManager].
+     * @return [Result] indicating success or containing any exception encountered during sign-out.
+     */
     suspend fun signOut(activityContext: Context): Result<Unit> {
         return try {
             auth.signOut()

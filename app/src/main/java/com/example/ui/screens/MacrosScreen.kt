@@ -91,6 +91,17 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Remote PC power, productivity launcher, and customizable macro deck screen.
+ *
+ * Organizes actions into two primary tabs:
+ * 1. **Wi-Fi PC Power & Launch**: Wake-on-LAN (WoL) magic packet dispatch, two-way clipboard sync,
+ *    remote URL launcher, system command triggers (Terminal, Calculator, Lock), and user-defined [CloudMacro] items.
+ * 2. **Keyboard Shortcuts**: One-tap execution of standard productivity shortcuts (Copy, Paste, Undo, Task Manager, etc.).
+ *
+ * @param viewModel Application [MainViewModel] coordinating network commands, HID macros, and cloud macro state.
+ * @param modifier Optional [Modifier] applied to the root screen container.
+ */
 @Composable
 fun MacrosScreen(
     viewModel: MainViewModel,
@@ -510,6 +521,16 @@ fun MacrosScreen(
     }
 }
 
+/**
+ * Interactive card button for triggering remote PC system commands, clipboard sync, or Wake-on-LAN actions.
+ *
+ * @param title Primary action label displayed on the card.
+ * @param subtitle Short secondary description displayed beneath [title].
+ * @param icon Leading [ImageVector] icon representing the action.
+ * @param color Accent color applied to the icon badge and border tint.
+ * @param modifier Optional [Modifier] for layout sizing and test tagging.
+ * @param onClick Callback invoked when the card is tapped.
+ */
 @Composable
 fun PowerActionCard(
     title: String,
@@ -552,6 +573,12 @@ fun PowerActionCard(
     }
 }
 
+/**
+ * Grid card representing a built-in keyboard shortcut [MacroItem] on the [MacrosScreen].
+ *
+ * @param macro Built-in [MacroItem] metadata and key combination definition.
+ * @param onClick Callback invoked when the user taps the card to execute the macro.
+ */
 @Composable
 fun MacroCard(
     macro: MacroItem,
@@ -621,6 +648,13 @@ fun MacroCard(
     }
 }
 
+/**
+ * Card displaying a user-created [CloudMacro] with one-tap execution and a delete action button.
+ *
+ * @param macro User-defined [CloudMacro] synced from Firestore.
+ * @param onClick Callback invoked when the macro card is tapped to execute its payload.
+ * @param onDelete Callback invoked when the delete icon button is tapped.
+ */
 @Composable
 fun CloudMacroCard(
     macro: CloudMacro,

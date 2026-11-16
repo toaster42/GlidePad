@@ -106,6 +106,17 @@ import com.example.ui.theme.TextSecondary
 import java.util.Locale
 import kotlin.math.pow
 
+/**
+ * Comprehensive configuration, cloud profile management, and gesture customization screen.
+ *
+ * Allows users to sign in with Google, sync or switch multi-PC cloud profiles, tune pointer sensitivity
+ * and velocity acceleration curves (with a live [AccelerationCurveCanvas] and [InteractiveTestPad]),
+ * customize multi-finger gesture bindings, toggle accessibility/haptic options, and submit feedback or diagnostics.
+ *
+ * @param viewModel Application [MainViewModel] managing settings persistence, auth, and cloud sync.
+ * @param settings Current reactive [TouchpadSettings] snapshot.
+ * @param modifier Optional [Modifier] applied to the root scrolling list.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -1057,6 +1068,15 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * Reusable settings row displaying a title, descriptive subtitle, and a Material 3 [Switch] control.
+ *
+ * @param title Primary setting label.
+ * @param subtitle Secondary explanatory text shown below [title].
+ * @param checked Current boolean state of the toggle switch.
+ * @param onCheckedChange Callback invoked when the user flips the switch.
+ * @param tag UI test tag attached to the [Switch] element.
+ */
 @Composable
 fun SettingToggleRow(
     title: String,
@@ -1090,6 +1110,13 @@ fun SettingToggleRow(
     }
 }
 
+/**
+ * Canvas graph plotting pointer output velocity against physical hand speed for the selected [AccelerationProfile].
+ *
+ * @param profile Active [AccelerationProfile] curve model (`LINEAR`, `DYNAMIC`, or `PRECISION`).
+ * @param multiplier User-configured sensitivity multiplier influencing curve steepness.
+ * @param modifier Optional [Modifier] defining canvas dimensions and styling.
+ */
 @Composable
 fun AccelerationCurveCanvas(
     profile: AccelerationProfile,
@@ -1135,6 +1162,12 @@ fun AccelerationCurveCanvas(
     }
 }
 
+/**
+ * Embedded mini-trackpad sandbox within [SettingsScreen] for testing pointer sensitivity and acceleration feel live.
+ *
+ * @param viewModel Application [MainViewModel] whose [com.example.engine.TouchpadEngine] processes the drag deltas.
+ * @param modifier Optional [Modifier] sizing and styling the test pad box.
+ */
 @Composable
 fun InteractiveTestPad(
     viewModel: MainViewModel,

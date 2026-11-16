@@ -470,6 +470,15 @@ fun TouchpadScreen(
     }
 }
 
+/**
+ * Tactile virtual mouse button card supporting press-and-hold state reporting for left/right click bars.
+ *
+ * @param label Button title displayed in the center of the card (e.g., `LEFT CLICK`, `RIGHT CLICK`).
+ * @param weight Layout weight proportion within the bottom mouse button bar.
+ * @param testTag UI test tag identifier for automated UI testing.
+ * @param onPressChange Callback invoked with `true` on finger down and `false` upon release/cancel.
+ * @param modifier Optional [Modifier] applied to the button box.
+ */
 @Composable
 fun MouseButtonCard(
     label: String,

@@ -57,6 +57,15 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import java.util.Locale
 
+/**
+ * Interactive network diagnostic dialog for running and inspecting Wi-Fi UDP latency, jitter, and throughput benchmarks.
+ *
+ * Displays live progress during Stage 1 (40-packet RTT & RFC 3550 jitter) and Stage 2 (120Hz stream burst),
+ * presents a graded summary report upon completion, and allows copying the companion Python benchmark script.
+ *
+ * @param viewModel Application [MainViewModel] providing benchmark state and execution triggers.
+ * @param onDismiss Callback invoked when the user closes the benchmark dialog.
+ */
 @Composable
 fun BenchmarkDialog(
     viewModel: MainViewModel,
@@ -355,6 +364,12 @@ fun BenchmarkDialog(
     )
 }
 
+/**
+ * Compact key-value metric row used inside the [BenchmarkDialog] results grid.
+ *
+ * @param label Metric name label displayed on the left.
+ * @param value Formatted metric value displayed on the right.
+ */
 @Composable
 private fun MetricRow(label: String, value: String) {
     Row(

@@ -33,6 +33,12 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Dialog prompting the user to name and persist the current PC IP, sensitivity, and acceleration curve as a cloud profile.
+ *
+ * @param viewModel Application [MainViewModel] used to read current settings and save the PC profile.
+ * @param onDismiss Callback invoked when the dialog is dismissed.
+ */
 @Composable
 fun SavePcProfileDialog(
     viewModel: MainViewModel,

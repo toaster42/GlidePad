@@ -67,6 +67,15 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Host receiver dashboard screen for ChromeOS laptops, tablets, and secondary Android displays.
+ *
+ * Controls the embedded [com.example.service.InAppReceiverManager] UDP server, displays the host IPv4 address
+ * and port for phone pairing, renders a real-time 2D cursor radar HUD, and streams incoming packet telemetry.
+ *
+ * @param viewModel Application [MainViewModel] exposing receiver controls and live telemetry flows.
+ * @param modifier Optional [Modifier] applied to the root lazy column.
+ */
 @Composable
 fun ReceiverDashboardScreen(
     viewModel: MainViewModel,

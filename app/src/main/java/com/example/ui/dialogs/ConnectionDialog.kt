@@ -81,6 +81,15 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Multi-tab connection management dialog for switching between Bluetooth HID, Wi-Fi UDP receiver, and Live Simulator modes.
+ *
+ * Provides paired Bluetooth device selection, LAN receiver auto-discovery, manual IP entry and ping testing,
+ * network latency benchmarking, and one-tap clipboard export of the companion Python receiver scripts.
+ *
+ * @param viewModel Application [MainViewModel] managing Bluetooth and Wi-Fi transport states.
+ * @param onDismiss Callback invoked when the dialog is dismissed.
+ */
 @Composable
 fun ConnectionDialog(
     viewModel: MainViewModel,

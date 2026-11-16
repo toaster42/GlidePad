@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+/**
+ * Primary OLED-optimized cyber dark color scheme for GlidePad.
+ */
 private val DarkColorScheme = darkColorScheme(
     primary = NeonCyan,
     onPrimary = SurfaceDark900,
@@ -31,6 +34,9 @@ private val DarkColorScheme = darkColorScheme(
     outline = SurfaceDark600
 )
 
+/**
+ * Fallback color scheme matching [DarkColorScheme] to preserve low eye fatigue during dark-room touchpad operation.
+ */
 private val LightColorScheme = darkColorScheme(
     // Trackpad app is optimized for OLED dark mode by default for low latency and zero eye fatigue
     primary = NeonCyan,
@@ -44,6 +50,13 @@ private val LightColorScheme = darkColorScheme(
     outline = SurfaceDark600
 )
 
+/**
+ * Root Material 3 theme wrapper for GlidePad, configuring edge-to-edge dark system bars and cyber color tokens.
+ *
+ * @param darkTheme Whether dark theme styling should be applied (defaults to `true`).
+ * @param dynamicColor Whether Android 12+ dynamic wallpaper color extraction is enabled (defaults to `false`).
+ * @param content Composable UI hierarchy rendered within the theme.
+ */
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = true, // Default to dark for touchpad usability

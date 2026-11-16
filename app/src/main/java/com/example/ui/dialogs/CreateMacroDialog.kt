@@ -43,6 +43,14 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Modal dialog for creating and saving a custom [CloudMacro] to the user's cloud-synced macro deck.
+ *
+ * Supports configuring multi-key keyboard shortcuts, web URL launchers, and remote host system commands.
+ *
+ * @param viewModel Application [MainViewModel] handling cloud macro persistence.
+ * @param onDismiss Callback invoked when the dialog is cancelled or after a macro is saved.
+ */
 @Composable
 fun CreateMacroDialog(
     viewModel: MainViewModel,

@@ -28,6 +28,8 @@ import java.util.concurrent.atomic.AtomicLong
  * real-time touchpad gestures, mouse deltas, scroll wheel events, and keyboard keys from remote
  * GlidePad phone controllers. Provides live telemetry, HUD coordinate tracking, and bidirectional
  * ping/pong heartbeat echo.
+ *
+ * @param context Application context used for network interface inspection.
  */
 class InAppReceiverManager(private val context: Context) {
 
@@ -39,45 +41,59 @@ class InAppReceiverManager(private val context: Context) {
     private var ppsMonitorJob: Job? = null
 
     private val _isRunning = MutableStateFlow(false)
+    /** Reactive state indicating whether the embedded UDP receiver server is actively listening. */
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
     private val _serverPort = MutableStateFlow(8089)
+    /** UDP port on which the in-app receiver socket is currently bound. */
     val serverPort: StateFlow<Int> = _serverPort.asStateFlow()
 
     private val _hostIp = MutableStateFlow("127.0.0.1")
+    /** Detected local IPv4 address of this host device on Wi-Fi, Ethernet, or virtual interface. */
     val hostIp: StateFlow<String> = _hostIp.asStateFlow()
 
     private val _lastClientIp = MutableStateFlow<String?>(null)
+    /** IPv4 address of the most recent remote GlidePad sender that transmitted a packet. */
     val lastClientIp: StateFlow<String?> = _lastClientIp.asStateFlow()
 
     private val _activeClients = MutableStateFlow<List<String>>(emptyList())
+    /** List of remote client IPv4 addresses that have sent packets within the active session window. */
     val activeClients: StateFlow<List<String>> = _activeClients.asStateFlow()
 
     private val _packetsPerSecond = MutableStateFlow(0)
+    /** Live incoming UDP packet rate measured in packets per second (Hz). */
     val packetsPerSecond: StateFlow<Int> = _packetsPerSecond.asStateFlow()
 
     private val _totalPacketsReceived = MutableStateFlow(0L)
+    /** Cumulative count of UDP packets received since the receiver started or stats were reset. */
     val totalPacketsReceived: StateFlow<Long> = _totalPacketsReceived.asStateFlow()
 
     private val _cursorNormalizedX = MutableStateFlow(0.5f)
+    /** Normalized horizontal cursor coordinate in `[0.0, 1.0]` for the receiver HUD preview canvas. */
     val cursorNormalizedX: StateFlow<Float> = _cursorNormalizedX.asStateFlow()
 
     private val _cursorNormalizedY = MutableStateFlow(0.5f)
+    /** Normalized vertical cursor coordinate in `[0.0, 1.0]` for the receiver HUD preview canvas. */
     val cursorNormalizedY: StateFlow<Float> = _cursorNormalizedY.asStateFlow()
 
     private val _lastButtonState = MutableStateFlow(0)
+    /** Bitmask of the most recently received mouse button state (`1` = Left, `2` = Right, `4` = Middle). */
     val lastButtonState: StateFlow<Int> = _lastButtonState.asStateFlow()
 
     private val _lastWheelDelta = MutableStateFlow(0)
+    /** Most recently received vertical scroll wheel delta value. */
     val lastWheelDelta: StateFlow<Int> = _lastWheelDelta.asStateFlow()
 
     private val _lastReceivedType = MutableStateFlow("None")
+    /** Packet type identifier of the most recently processed UDP payload (e.g., `mouse`, `key`, `ping`). */
     val lastReceivedType: StateFlow<String> = _lastReceivedType.asStateFlow()
 
     private val _lastReceivedSummary = MutableStateFlow("Waiting for incoming connection...")
+    /** Human-readable summary of the most recently processed event for diagnostic display. */
     val lastReceivedSummary: StateFlow<String> = _lastReceivedSummary.asStateFlow()
 
     private val _recentPacketsLog = MutableStateFlow<List<String>>(emptyList())
+    /** Rolling log of recent timestamped packet events displayed in the receiver console. */
     val recentPacketsLog: StateFlow<List<String>> = _recentPacketsLog.asStateFlow()
 
     private val clientTimestamps = ConcurrentHashMap<String, Long>()
@@ -327,6 +343,9 @@ class InAppReceiverManager(private val context: Context) {
         appendLog("Host Receiver stopped")
     }
 
+    /**
+     * Resets cumulative packet counters, live rate metrics, packet logs, and centers the virtual cursor.
+     */
     fun resetStats() {
         _totalPacketsReceived.value = 0L
         _packetsPerSecond.value = 0

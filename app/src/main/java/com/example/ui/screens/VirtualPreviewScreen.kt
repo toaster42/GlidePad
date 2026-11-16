@@ -54,6 +54,15 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Interactive virtual PC desktop monitor and real-time HID packet stream inspector screen.
+ *
+ * Renders a simulated desktop viewport showing live cursor coordinates, click ripple states,
+ * scroll offsets, last triggered gesture/key badges, and a scrolling monospace log of dispatched HID packets.
+ *
+ * @param viewModel Application [MainViewModel] providing [com.example.model.VirtualScreenState] and transport statistics.
+ * @param modifier Optional [Modifier] applied to the root layout column.
+ */
 @Composable
 fun VirtualPreviewScreen(
     viewModel: MainViewModel,

@@ -43,6 +43,12 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
+/**
+ * Dialog for submitting categorized feature requests and usability suggestions to the cloud feedback collection.
+ *
+ * @param viewModel Application [MainViewModel] handling feedback submission.
+ * @param onDismiss Callback invoked when the dialog is dismissed or submission completes.
+ */
 @Composable
 fun FeedbackDialog(
     viewModel: MainViewModel,
