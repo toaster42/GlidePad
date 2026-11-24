@@ -6,6 +6,7 @@ import com.example.model.GestureAction
 import com.example.model.GestureType
 import com.example.model.TouchpadSettings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -116,5 +117,30 @@ class TouchpadEngineTest {
 
         engine.handleThreeFingerTap()
         assertEquals(GestureAction.TASK_VIEW, triggeredAction)
+    }
+
+    @Test
+    fun testIsDraggingStateFlowTracksStartAndStopDrag() {
+        val sentButtons = mutableListOf<Byte>()
+        val engine = TouchpadEngine(
+            settings = TouchpadSettings(),
+            onSendMouse = { btn, _, _, _ -> sentButtons.add(btn) },
+            onTriggerAction = {}
+        )
+
+        assertFalse(engine.isDragging.value)
+
+        // stopDrag when idle is a no-op
+        engine.stopDrag()
+        assertFalse(engine.isDragging.value)
+        assertTrue(sentButtons.isEmpty())
+
+        engine.startDrag()
+        assertTrue(engine.isDragging.value)
+        assertEquals(listOf(1.toByte()), sentButtons)
+
+        engine.stopDrag()
+        assertFalse(engine.isDragging.value)
+        assertEquals(listOf(1.toByte(), 0.toByte()), sentButtons)
     }
 }

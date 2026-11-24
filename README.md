@@ -16,7 +16,7 @@
 - [Cross-Platform Quickstart](#cross-platform-quickstart)
   - [1. Mobile App (Controller)](#1-mobile-app-controller)
   - [2. Python PC Receiver (Host)](#2-python-pc-receiver-host)
-  - [3. ChromeOS Dual-Role Mode](#3-chromeos-dual-role-mode)
+  - [3. ChromeOS & Float Window Mode](#3-chromeos--float-window-mode)
 - [Wire Protocol Specifications](#wire-protocol-specifications)
 - [Google Sign-In & Play App Signing Setup](#google-sign-in--play-app-signing-setup)
 - [Technical Documentation Index](#technical-documentation-index)
@@ -35,9 +35,9 @@
 - **Full Keyboard & Hotkey Latch Deck**: Virtual keyboard with latching sticky modifier keys (`Ctrl`, `Alt`, `Shift`, `Super/Win`), media controls, and quick macros.
 - **Cloud Macro Sync**: Secure Firebase Firestore synchronization for custom macro decks and per-device PC network profiles.
 - **ChromeOS & Large-Screen Optimization**:
-  - Resizable freeform desktop window support with auto-adaptive Material 3 `NavigationRail`.
-  - Built-in **In-App UDP Receiver (`:8089`)** allowing Chromebooks to act as the receiving host for other phones.
-  - Physical mouse hover, scroll wheel, and keyboard shortcut listeners (`1`-`6` tab switching, `Esc` navigation).
+  - Resizable freeform desktop window support (down to `240dp × 180dp`) with auto-adaptive Material 3 `NavigationRail` and full-bleed touchpad sizing.
+  - **Float Window Mode**: Automatically switches to a distraction-free, full-window touchpad when floated (`Search + Z` or caption menu) or resized small, or manually via the Float toggle chip / `F` key.
+  - Physical mouse hover, scroll wheel, and keyboard shortcut listeners (`1`-`5` tab switching, `F` Float toggle, `Esc` dialog / Float / Touchpad navigation).
 - **Network Benchmark Engine**: Live round-trip latency (RTT) measurement, jitter analysis, throughput gauge (`Hz`), and packet loss reporting.
 
 ---
@@ -50,15 +50,17 @@
 │                                                                        │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                     Jetpack Compose UI Layer                     │  │
-│  │  • TouchpadScreen          • KeyboardScreen                      │  │
-│  │  • MacrosScreen            • VirtualPreviewScreen                │  │
-│  │  • ReceiverDashboardScreen • ConnectionDialog                    │  │
+│  │  • MainLayoutFrame (COMPACT / EXPANDED / FLOAT)                  │  │
+│  │  • TouchpadScreen / TouchpadSurface • KeyboardScreen             │  │
+│  │  • MacrosScreen    • VirtualPreviewScreen • SettingsScreen       │  │
+│  │  • FloatModeOverlay • ConnectionDialog                           │  │
 │  └──────────────────────────────────┬───────────────────────────────┘  │
 │                                     │ User Input Events                │
 │                                     ▼                                  │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                 Presentation & State Management                  │  │
 │  │  • MainViewModel (Coroutines, StateFlows, Preferences)           │  │
+│  │  • FloatModeController & WindowLayoutPolicy                      │  │
 │  │  • TouchpadEngine (Minimum-jerk filtering, acceleration curves)  │  │
 │  │  • BenchmarkEngine (Synthetic stress test & jitter analytics)    │  │
 │  └───────────────────┬──────────────────────────────┬───────────────┘  │
@@ -75,14 +77,14 @@
                                                    │ UDP Datagrams (:8089)
                                                    ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        RECEIVER & HOST TARGETS                         │
+│                          EXTERNAL HOST TARGETS                         │
 │                                                                        │
 │  ┌─────────────────────────────────┐  ┌──────────────────────────────┐ │
-│  │ Python PC Receiver (v2.3)       │  │ ChromeOS In-App Receiver     │ │
-│  │ • pynput mouse & keyboard hooks │  │ • InAppReceiverManager daemon│ │
-│  │ • Windows SendInput API         │  │ • Live Radar Coordinate HUD  │ │
-│  │ • Linux uinput / X11 / Wayland  │  │ • Real-time PPS & Loss Stats │ │
-│  │ • macOS Quartz Event Taps       │  │ • Bidirectional Ping Echo    │ │
+│  │ Python PC Receiver (v2.3)       │  │ Native Bluetooth HID Hosts   │ │
+│  │ • pynput mouse & keyboard hooks │  │ • Windows / macOS / Linux    │ │
+│  │ • Windows SendInput API         │  │ • Smart TVs & Media Boxes    │ │
+│  │ • Linux uinput / X11 / Wayland  │  │ • Presentation Rigs          │ │
+│  │ • macOS Quartz Event Taps       │  │ • Driverless HID Pairing     │ │
 │  └─────────────────────────────────┘  └──────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -128,15 +130,17 @@ python3 glidepad_receiver_v2_3.py
 
 *For Linux systems using Wayland or without root input access, consult the [Python Receiver Guide](docs/PYTHON_RECEIVERS.md).*
 
-### 3. ChromeOS Dual-Role Mode
+### 3. ChromeOS & Float Window Mode
 
-On Chromebooks, GlidePad works in two distinct modes:
+On Chromebooks and Android desktop-windowing devices, GlidePad adapts automatically to your window size:
 
-1. **Controller Mode**: Use your Chromebook's touchscreen or physical keyboard to remote-control another device. The UI automatically switches to an ergonomic **NavigationRail** on the left edge.
-2. **Host Receiver Mode**: Turn your Chromebook into the receiving host!
-   - Open GlidePad on your Chromebook and navigate to the **Host Receiver** tab (or press key `5`).
-   - Click **Start Receiver**. Your Chromebook starts an embedded UDP daemon on port `8089`.
-   - On your phone, enter your Chromebook's displayed IP to control it wirelessly with real-time pointer HUD feedback.
+- **Desktop Controller Layout**: On expanded windows (`width >= 600dp`), the UI switches to a left-aligned Material 3 `NavigationRail`, and the touchpad dynamically fills all available space with no width cap.
+- **Float Window Mode**:
+  - Float GlidePad with ChromeOS **`Search + Z`** (or the window caption menu) or resize it to a compact window (`(height < 480dp && width < 600dp) || min(width, height) < 320dp`, down to `240dp × 180dp`), and GlidePad automatically switches to a full-window touchpad with only a connection status dot and exit button overlay.
+  - Toggle Float mode manually anytime from the Touchpad quick-controls bar or by pressing **`F`**, and exit via the overlay button or **`Esc`** (your active screen is preserved underneath).
+  - Keyboard shortcuts: `1`–`5` switch tabs (Touchpad, Keyboard, Quick Macros, Live Preview, Settings), `F` toggles Float mode, and `Esc` closes dialogs, exits Float mode, or returns to Touchpad.
+
+*See the [ChromeOS Integration Guide](docs/CHROMEOS_GUIDE.md) for full window thresholds and shortcut details.*
 
 ---
 
@@ -212,7 +216,7 @@ When an app is distributed via the Google Play Store, **Google Play App Signing*
 | [System Architecture](docs/ARCHITECTURE.md) | In-depth breakdown of `TouchpadEngine`, coroutine threading models, and state flows |
 | [Wire Protocol Specs](docs/WIRE_PROTOCOL.md) | Complete byte-level and JSON datagram specifications for all packet types |
 | [Python Receivers](docs/PYTHON_RECEIVERS.md) | PC receiver scripts, permissions setup, benchmark receiver, and integration tests |
-| [ChromeOS Guide](docs/CHROMEOS_GUIDE.md) | Multi-window desktop adaptation, NavigationRail layouts, and embedded host receiver |
+| [ChromeOS Guide](docs/CHROMEOS_GUIDE.md) | Multi-window desktop adaptation, NavigationRail layouts, Float window mode, and keyboard shortcuts |
 
 ---
 

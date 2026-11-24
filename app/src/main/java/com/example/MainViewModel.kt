@@ -28,6 +28,7 @@ import com.example.service.AuthManager
 import com.example.service.BluetoothHidManager
 import com.example.service.HapticFeedbackHelper
 import com.example.service.NetworkStreamManager
+import com.example.ui.layout.FloatModeController
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -55,10 +56,7 @@ enum class AppScreen(val title: String) {
     VIRTUAL_SCREEN("Live Preview"),
 
     /** Fine-grained trackpad tuning, gestures, and haptics preferences. */
-    SETTINGS("Settings & Tuning"),
-
-    /** Embedded ChromeOS in-app UDP receiver dashboard. */
-    RECEIVER("Host Receiver")
+    SETTINGS("Settings & Tuning")
 }
 
 /**
@@ -107,8 +105,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Wi-Fi UDP streaming client manager. */
     val networkManager = NetworkStreamManager(application)
 
-    /** In-app local UDP server receiver for ChromeOS / Android tablet receivers. */
-    val inAppReceiverManager = com.example.service.InAppReceiverManager(application)
+    /** Controller coordinating automatic size-driven and manual Float touchpad mode. */
+    val floatModeController = FloatModeController()
+
+    /** Observable Float-mode flag driving the root layout shell. */
+    val isFloatMode: StateFlow<Boolean> = floatModeController.isFloat
 
     // Firebase & Cloud Repositories
     /** Google Sign-In and Firebase Auth session manager. */
@@ -1059,30 +1060,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Toggles the local ChromeOS in-app UDP receiver server state.
+     * Updates [floatModeController] with the latest root window dimensions in dp.
      *
-     * @param port UDP port number to listen on (default 8089).
-     * @return True if receiver was started, false if stopped or failed to bind.
+     * @param widthDp Available root container width in dp.
+     * @param heightDp Available root container height in dp.
      */
-    fun toggleInAppReceiver(port: Int = 8089): Boolean {
-        hapticHelper.click(settings.value.hapticLevel)
-        return if (inAppReceiverManager.isRunning.value) {
-            inAppReceiverManager.stop()
-            false
-        } else {
-            inAppReceiverManager.start(port)
-        }
-    }
+    fun onWindowSize(widthDp: Float, heightDp: Float) =
+        floatModeController.onWindowSize(widthDp, heightDp)
 
     /**
-     * Resets packet and throughput telemetry statistics on the in-app receiver.
+     * Toggles Float touchpad mode manually via [floatModeController].
      */
-    fun resetReceiverStats() {
-        inAppReceiverManager.resetStats()
-    }
+    fun toggleFloatMode() = floatModeController.toggle()
+
+    /**
+     * Exits Float touchpad mode back to the standard navigation shell via [floatModeController].
+     */
+    fun exitFloatMode() = floatModeController.exitFloat()
 
     override fun onCleared() {
         super.onCleared()
-        inAppReceiverManager.stop()
     }
 }
