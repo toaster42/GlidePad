@@ -55,8 +55,8 @@
             <layout
                 android:defaultWidth="900dp"
                 android:defaultHeight="650dp"
-                android:minWidth="420dp"
-                android:minHeight="480dp" />
+                android:minWidth="240dp"
+                android:minHeight="180dp" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

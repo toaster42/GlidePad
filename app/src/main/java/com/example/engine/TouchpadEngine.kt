@@ -4,6 +4,9 @@ import com.example.model.AccelerationProfile
 import com.example.model.GestureAction
 import com.example.model.GestureType
 import com.example.model.TouchpadSettings
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -32,7 +35,12 @@ class TouchpadEngine(
 
     // Current mouse button bitmask (1 = Left, 2 = Right, 4 = Middle)
     private var currentButtonsMask: Byte = 0
-    private var isDragging = false
+    private val _isDragging = MutableStateFlow(false)
+
+    /**
+     * Observable drag-lock state reflecting whether the left-button drag lock is currently engaged.
+     */
+    val isDragging: StateFlow<Boolean> = _isDragging.asStateFlow()
 
     /**
      * Updates active engine settings without resetting sub-pixel accumulator state.
@@ -98,7 +106,7 @@ class TouchpadEngine(
         subPixelRemainderY = targetDy - sendDy
 
         if (sendDx != 0 || sendDy != 0) {
-            val buttons = if (isDragging) (currentButtonsMask.toInt() or 1).toByte() else currentButtonsMask
+            val buttons = if (_isDragging.value) (currentButtonsMask.toInt() or 1).toByte() else currentButtonsMask
             onSendMouse(buttons, sendDx, sendDy, 0)
         }
     }
@@ -186,7 +194,7 @@ class TouchpadEngine(
      * Engages mouse left-click button drag state for double-tap drag gestures.
      */
     fun startDrag() {
-        isDragging = true
+        _isDragging.value = true
         currentButtonsMask = (currentButtonsMask.toInt() or 1).toByte()
         onSendMouse(currentButtonsMask, 0, 0, 0)
     }
@@ -195,8 +203,8 @@ class TouchpadEngine(
      * Releases active mouse drag state.
      */
     fun stopDrag() {
-        if (isDragging) {
-            isDragging = false
+        if (_isDragging.value) {
+            _isDragging.value = false
             currentButtonsMask = (currentButtonsMask.toInt() and 1.inv()).toByte()
             onSendMouse(currentButtonsMask, 0, 0, 0)
         }
