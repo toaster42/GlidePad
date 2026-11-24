@@ -3,7 +3,7 @@
 [![Android CI](https://github.com/aistudio/glidepad/actions/workflows/ci.yml/badge.svg)](https://github.com/aistudio/glidepad/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20ChromeOS-00E5FF.svg)](https://developer.android.com)
 [![Protocol](https://img.shields.io/badge/Protocol-UDP%20%2F%20Bluetooth%20HID-7000FF.svg)](#wire-protocol-specifications)
-[![License](https://img.shields.io/badge/License-Apache%202.0-10B981.svg)](LICENSE)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-10B981.svg)](LICENSE)
 
 **GlidePad** transforms your Android phone, tablet, or Chromebook into an ultra-low-latency wireless trackpad, keyboard, and macro deck for Windows, macOS, Linux, and ChromeOS hosts. Engineered for high performance, GlidePad supports dual transmission modes: **Local Wi-Fi UDP Streaming** (sub-5ms packet turnaround with Flash & Hogan minimum-jerk kinematics) and **Standard Bluetooth HID**.
 
@@ -22,6 +22,7 @@
 - [Technical Documentation Index](#technical-documentation-index)
 - [Building & Testing](#building--testing)
 - [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ---
 
@@ -256,3 +257,9 @@ gradle dokkaGenerateHtml
   2. Verify that your PC firewall allows incoming UDP packets on port `8089`.
   3. Ensure the receiver script is running (`python3 glidepad_receiver_v2_3.py`).
 - **Heartbeat lagging trackpad**: GlidePad incorporates automatic active-gesture suppression—heartbeat pings are throttled during active continuous gestures to ensure zero touch packet contention.
+
+---
+
+## License
+
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)** license. See [LICENSE](LICENSE) or https://creativecommons.org/licenses/by-nc-sa/4.0/ for the full license text.
